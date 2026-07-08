@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, conectarSocket } from '../api';
 import FichaJogador from './FichaJogador';
 
 export default function PainelMestre() {
@@ -71,6 +71,12 @@ function PainelTransmitir({ usuarios }) {
   const [enviando, setEnviando] = useState(false);
   const [msg, setMsg] = useState('');
   const [destinoSombra, setDestinoSombra] = useState(usuarios[0]?.id ?? '');
+  const [enfaseMaxuel, setEnfaseMaxuel] = useState(1);
+
+  function soltarMaxuel() {
+    const socket = conectarSocket();
+    socket.emit('soltar-gato', { enfaseValor: Number(enfaseMaxuel) || 1 });
+  }
 
   async function invocarSombra() {
     if (!destinoSombra) { setMsg('Escolha um jogador'); return; }
@@ -150,6 +156,21 @@ function PainelTransmitir({ usuarios }) {
           style={{ background: 'var(--shadow)', color: 'var(--text)' }}>
           A sombra quer te oferecer um acordo...
         </button>
+      </div>
+
+      <div className="pt-3 mt-3 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <label className="text-xs block mb-1" style={{ color: 'var(--gold)' }}>🐈 Soltar o Maxuel</label>
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>Ênfase</span>
+          <input type="number" min="1" value={enfaseMaxuel} onChange={e => setEnfaseMaxuel(Math.max(1, Number(e.target.value)))}
+            className="w-14 text-center py-1 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+          <button onClick={soltarMaxuel} className="flex-1 py-1.5 rounded text-sm font-medium" style={{ background: 'var(--gold)', color: '#120810' }}>
+            Soltar na tela de todos
+          </button>
+        </div>
+        <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
+          Ele aparece pequeno em um lugar aleatório da tela. Quem clicar primeiro ganha a ênfase.
+        </p>
       </div>
     </div>
   );

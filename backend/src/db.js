@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS talentos (
 -- migrações incrementais (ignora erro se a coluna já existir)
 `);
 
-const novasColunasTalentos = ['execucao TEXT', 'alvo TEXT', 'ataque TEXT', 'acerto TEXT', 'erro TEXT', 'efeito TEXT', 'especial TEXT'];
+const novasColunasTalentos = ['execucao TEXT', 'alvo TEXT', 'ataque TEXT', 'acerto TEXT', 'erro TEXT', 'efeito TEXT', 'especial TEXT', 'ordem INTEGER DEFAULT 0'];
 for (const coluna of novasColunasTalentos) {
   try { db.exec(`ALTER TABLE talentos ADD COLUMN ${coluna}`); } catch { /* já existe */ }
 }

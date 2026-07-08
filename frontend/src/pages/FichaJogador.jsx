@@ -23,8 +23,13 @@ export default function FichaJogador({ personagemId }) {
     const socket = conectarSocket();
     socket.emit('entrar-ficha', personagemId);
     const aoAtualizar = (nova) => setFicha((atual) => atual && atual.id === nova.id ? nova : atual);
+    const aoAtualizarParcial = (campos) => setFicha((atual) => atual ? { ...atual, ...campos } : atual);
     socket.on('ficha-atualizada', aoAtualizar);
-    return () => socket.off('ficha-atualizada', aoAtualizar);
+    socket.on('ficha-atualizada-parcial', aoAtualizarParcial);
+    return () => {
+      socket.off('ficha-atualizada', aoAtualizar);
+      socket.off('ficha-atualizada-parcial', aoAtualizarParcial);
+    };
   }, [personagemId]);
 
   function atualizarLocal(campos) {
@@ -35,14 +40,24 @@ export default function FichaJogador({ personagemId }) {
     }, 500);
   }
 
+  async function exportarPdf() {
+    const resp = await api.get(`/personagens/${personagemId}/pdf`, { responseType: 'blob' });
+    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(ficha.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!ficha) return <div className="p-8 text-center" style={{ color: 'var(--text-dim)' }}>Carregando ficha...</div>;
 
   return (
     <div className="max-w-2xl mx-auto pb-24">
-      <Cabecalho ficha={ficha} atualizarLocal={atualizarLocal} personagemId={personagemId} setFicha={setFicha} />
+      <Cabecalho ficha={ficha} atualizarLocal={atualizarLocal} personagemId={personagemId} setFicha={setFicha} exportarPdf={exportarPdf} />
 
       <div className="flex gap-1 px-4 mt-4 sticky top-0 z-10 py-2" style={{ background: 'var(--bg)' }}>
-        {[['ficha', 'Ficha'], ['talentos', 'Talentos'], ['inventario', 'Inventário']].map(([id, label]) => (
+        {[['ficha', 'Ficha'], ['talentos', 'Habilidades'], ['magias', 'Magias'], ['inventario', 'Inventário']].map(([id, label]) => (
           <button key={id} onClick={() => setAba(id)}
             className="flex-1 py-2 rounded text-sm font-medium transition-colors"
             style={aba === id
@@ -55,14 +70,21 @@ export default function FichaJogador({ personagemId }) {
 
       <div className="px-4 mt-4">
         {aba === 'ficha' && <AbaFicha ficha={ficha} atualizarLocal={atualizarLocal} />}
-        {aba === 'talentos' && <AbaTalentos personagemId={personagemId} talentos={ficha.talentos} recarregar={carregar} />}
+        {aba === 'talentos' && (
+          <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos} recarregar={carregar}
+            filtro={t => t.tipo !== 'Magia'} tipoPadrao="Habilidade" tituloAdicionar="nova habilidade/talento" />
+        )}
+        {aba === 'magias' && (
+          <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos} recarregar={carregar}
+            filtro={t => t.tipo === 'Magia'} tipoPadrao="Magia" tituloAdicionar="nova magia" />
+        )}
         {aba === 'inventario' && <AbaInventario personagemId={personagemId} itens={ficha.inventario} recarregar={carregar} />}
       </div>
     </div>
   );
 }
 
-function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
+function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha, exportarPdf }) {
   const inputRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -115,6 +137,10 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
               className="w-full px-2 py-1 rounded text-xs font-medium outline-none"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--shadow)', color: '#c9a8ec' }} />
           </div>
+          <button onClick={exportarPdf} title="Exportar PDF"
+            className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            📄 PDF
+          </button>
         </div>
       </div>
     </div>
@@ -374,8 +400,74 @@ const ICONES_EXECUCAO = {
   'Mais que uma ação': '✛',
 };
 
-function CardTalento({ t, remover }) {
+const CAMPOS_VAZIOS_TALENTO = {
+  nome: '', trilha: '', tipo: 'Habilidade', execucao: 'Ação', custo: '', alcance: '', alvo: '',
+  duracao: '', ataque: '', descritores: '', acerto: '', erro: '', efeito: '', especial: '', descricao: ''
+};
+
+function FormularioTalento({ valores, setValores, onSalvar, onCancelar, textoBotao }) {
+  const campo = (chave, placeholder, largura = '') => (
+    <input placeholder={placeholder} value={valores[chave] || ''} onChange={e => setValores({ ...valores, [chave]: e.target.value })}
+      className={`px-2 py-1.5 rounded text-sm ${largura}`} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+  );
+  return (
+    <div className="space-y-2">
+      {campo('nome', 'Nome da habilidade/magia', 'w-full')}
+      <div className="grid grid-cols-2 gap-2">
+        <select value={valores.tipo} onChange={e => setValores({ ...valores, tipo: e.target.value })}
+          className="px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+          <option value="Habilidade">Habilidade</option>
+          <option value="Magia">Magia</option>
+          <option value="Talento">Talento</option>
+        </select>
+        <select value={valores.execucao} onChange={e => setValores({ ...valores, execucao: e.target.value })}
+          className="px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+          {Object.keys(ICONES_EXECUCAO).map(op => <option key={op} value={op}>{op}</option>)}
+        </select>
+        {campo('trilha', 'Trilha')}
+        {campo('custo', 'Custo (ex: 1 PE)')}
+      </div>
+      {campo('descritores', 'Tags (ex: Ataque, Mágico, Ígneo)', 'w-full')}
+      <div className="grid grid-cols-2 gap-2">
+        {campo('alcance', 'Alcance')}
+        {campo('alvo', 'Alvo')}
+        {campo('duracao', 'Duração')}
+        {campo('ataque', 'Ataque (ex: mágico vs DES)')}
+      </div>
+      {campo('acerto', 'Acerto: efeito se acertar', 'w-full')}
+      {campo('erro', 'Erro: efeito se errar', 'w-full')}
+      {campo('efeito', 'Efeito: efeito base', 'w-full')}
+      {campo('especial', 'Especial: requisitos/particularidades', 'w-full')}
+      <textarea placeholder="Descrição livre (opcional)" value={valores.descricao} onChange={e => setValores({ ...valores, descricao: e.target.value })}
+        className="w-full px-2 py-1.5 rounded text-sm" rows={2} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+      <div className="flex gap-2">
+        <button onClick={onSalvar} className="text-xs px-3 py-1.5 rounded" style={{ background: 'var(--gold)', color: '#120810' }}>
+          {textoBotao || 'Adicionar'}
+        </button>
+        <button onClick={onCancelar} className="text-xs px-3 py-1.5 rounded" style={{ color: 'var(--text-dim)' }}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CardTalento({ t, remover, salvar, moverCima, moverBaixo, primeiro, ultimo }) {
+  const [editando, setEditando] = useState(false);
+  const [valores, setValores] = useState(t);
+  const [descOculta, setDescOculta] = useState(false);
   const tags = (t.descritores || '').split(',').map(s => s.trim()).filter(Boolean);
+
+  if (editando) {
+    return (
+      <Secao titulo={`Editando: ${t.nome}`}>
+        <FormularioTalento valores={valores} setValores={setValores} textoBotao="Salvar"
+          onSalvar={async () => { await salvar(valores); setEditando(false); }}
+          onCancelar={() => { setValores(t); setEditando(false); }} />
+      </Secao>
+    );
+  }
+
   return (
     <div className="rounded-lg overflow-hidden mb-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between px-3 py-2" style={{ background: 'var(--shadow)' }}>
@@ -383,11 +475,15 @@ function CardTalento({ t, remover }) {
           <span>{ICONES_EXECUCAO[t.execucao] || '▶'}</span>
           <span className="uppercase tracking-wide">{t.nome}</span>
         </span>
-        {t.custo && (
-          <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(0,0,0,0.25)', color: '#fff' }}>
-            {t.custo}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {t.custo && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'rgba(0,0,0,0.25)', color: '#fff' }}>
+              {t.custo}
+            </span>
+          )}
+          <button onClick={moverCima} disabled={primeiro} className="text-xs px-1" style={{ color: primeiro ? 'rgba(255,255,255,0.3)' : '#fff' }} title="Mover pra cima">▲</button>
+          <button onClick={moverBaixo} disabled={ultimo} className="text-xs px-1" style={{ color: ultimo ? 'rgba(255,255,255,0.3)' : '#fff' }} title="Mover pra baixo">▼</button>
+        </div>
       </div>
 
       {tags.length > 0 && (
@@ -413,26 +509,33 @@ function CardTalento({ t, remover }) {
         {t.erro && <p><b style={{ color: 'var(--gold)' }}>Erro:</b> {t.erro}</p>}
         {t.efeito && <p><b style={{ color: 'var(--gold)' }}>Efeito:</b> {t.efeito}</p>}
         {t.especial && <p><b style={{ color: 'var(--gold)' }}>Especial:</b> {t.especial}</p>}
-        {t.descricao && <p className="italic" style={{ color: 'var(--text-dim)' }}>{t.descricao}</p>}
-        <button onClick={remover} className="text-xs pt-1" style={{ color: 'var(--danger)' }}>remover</button>
+
+        {t.descricao && !descOculta && <p className="italic" style={{ color: 'var(--text-dim)' }}>{t.descricao}</p>}
+
+        <div className="flex gap-3 pt-1">
+          {t.descricao && (
+            <button onClick={() => setDescOculta(!descOculta)} className="text-xs" style={{ color: 'var(--text-dim)' }}>
+              {descOculta ? 'mostrar descrição' : 'ocultar descrição'}
+            </button>
+          )}
+          <button onClick={() => setEditando(true)} className="text-xs" style={{ color: 'var(--gold)' }}>editar</button>
+          <button onClick={remover} className="text-xs" style={{ color: 'var(--danger)' }}>remover</button>
+        </div>
       </div>
     </div>
   );
 }
 
-const CAMPOS_VAZIOS_TALENTO = {
-  nome: '', trilha: '', tipo: '', execucao: 'Ação', custo: '', alcance: '', alvo: '',
-  duracao: '', ataque: '', descritores: '', acerto: '', erro: '', efeito: '', especial: '', descricao: ''
-};
-
-function AbaTalentos({ personagemId, talentos, recarregar }) {
-  const [novo, setNovo] = useState(CAMPOS_VAZIOS_TALENTO);
+function AbaHabilidades({ personagemId, talentos, recarregar, filtro, tipoPadrao, tituloAdicionar }) {
+  const [novo, setNovo] = useState({ ...CAMPOS_VAZIOS_TALENTO, tipo: tipoPadrao });
   const [aberto, setAberto] = useState(false);
+
+  const lista = talentos.filter(filtro);
 
   async function adicionar() {
     if (!novo.nome) return;
     await api.post(`/personagens/${personagemId}/talentos`, novo);
-    setNovo(CAMPOS_VAZIOS_TALENTO);
+    setNovo({ ...CAMPOS_VAZIOS_TALENTO, tipo: tipoPadrao });
     setAberto(false);
     recarregar();
   }
@@ -442,58 +545,92 @@ function AbaTalentos({ personagemId, talentos, recarregar }) {
     recarregar();
   }
 
-  const campo = (chave, placeholder, largura = '') => (
-    <input placeholder={placeholder} value={novo[chave]} onChange={e => setNovo({ ...novo, [chave]: e.target.value })}
-      className={`px-2 py-1.5 rounded text-sm ${largura}`} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-  );
+  async function salvar(id, valores) {
+    await api.put(`/talentos/${id}`, valores);
+    recarregar();
+  }
+
+  async function mover(index, direcao) {
+    const outro = lista[index + direcao];
+    const atual = lista[index];
+    if (!outro) return;
+    await Promise.all([
+      api.put(`/talentos/${atual.id}`, { ordem: outro.ordem }),
+      api.put(`/talentos/${outro.id}`, { ordem: atual.ordem }),
+    ]);
+    recarregar();
+  }
 
   return (
     <>
-      {talentos.map(t => <CardTalento key={t.id} t={t} remover={() => remover(t.id)} />)}
+      {lista.map((t, i) => (
+        <CardTalento key={t.id} t={t}
+          remover={() => remover(t.id)}
+          salvar={(valores) => salvar(t.id, valores)}
+          moverCima={() => mover(i, -1)}
+          moverBaixo={() => mover(i, 1)}
+          primeiro={i === 0}
+          ultimo={i === lista.length - 1}
+        />
+      ))}
 
       {!aberto && (
         <button onClick={() => setAberto(true)} className="w-full py-2 rounded text-sm mb-4" style={{ border: '1px dashed var(--gold)', color: 'var(--gold)' }}>
-          + nova habilidade/magia
+          + {tituloAdicionar}
         </button>
       )}
 
       {aberto && (
-        <Secao titulo="Nova habilidade/magia">
-          <div className="space-y-2">
-            {campo('nome', 'Nome da habilidade', 'w-full')}
-            <div className="grid grid-cols-2 gap-2">
-              {campo('trilha', 'Trilha')}
-              <select value={novo.execucao} onChange={e => setNovo({ ...novo, execucao: e.target.value })}
-                className="px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}>
-                {Object.keys(ICONES_EXECUCAO).map(op => <option key={op} value={op}>{op}</option>)}
-              </select>
-              {campo('custo', 'Custo (ex: 1 PE)')}
-              {campo('descritores', 'Tags (ex: Ataque, Mágico, Ígneo)')}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {campo('alcance', 'Alcance')}
-              {campo('alvo', 'Alvo')}
-              {campo('duracao', 'Duração')}
-              {campo('ataque', 'Ataque (ex: mágico vs DES)')}
-            </div>
-            {campo('acerto', 'Acerto: efeito se acertar', 'w-full')}
-            {campo('erro', 'Erro: efeito se errar', 'w-full')}
-            {campo('efeito', 'Efeito: efeito base', 'w-full')}
-            {campo('especial', 'Especial: requisitos/particularidades', 'w-full')}
-            <textarea placeholder="Descrição livre (opcional)" value={novo.descricao} onChange={e => setNovo({ ...novo, descricao: e.target.value })}
-              className="w-full px-2 py-1.5 rounded text-sm" rows={2} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-            <div className="flex gap-2">
-              <button onClick={adicionar} className="text-xs px-3 py-1.5 rounded" style={{ background: 'var(--gold)', color: '#120810' }}>
-                Adicionar
-              </button>
-              <button onClick={() => { setAberto(false); setNovo(CAMPOS_VAZIOS_TALENTO); }} className="text-xs px-3 py-1.5 rounded" style={{ color: 'var(--text-dim)' }}>
-                Cancelar
-              </button>
-            </div>
-          </div>
+        <Secao titulo={tituloAdicionar}>
+          <FormularioTalento valores={novo} setValores={setNovo} onSalvar={adicionar}
+            onCancelar={() => { setAberto(false); setNovo({ ...CAMPOS_VAZIOS_TALENTO, tipo: tipoPadrao }); }} />
         </Secao>
       )}
     </>
+  );
+}
+
+function ItemInventario({ item, salvar, remover }) {
+  const [editando, setEditando] = useState(false);
+  const [valores, setValores] = useState(item);
+
+  if (editando) {
+    return (
+      <div className="p-2 rounded space-y-2" style={{ background: 'var(--surface-2)' }}>
+        <input value={valores.nome} onChange={e => setValores({ ...valores, nome: e.target.value })} placeholder="Nome"
+          className="w-full px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <div className="grid grid-cols-3 gap-2">
+          <input type="number" value={valores.quantidade} onChange={e => setValores({ ...valores, quantidade: Number(e.target.value) })} placeholder="Qtd"
+            className="px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+          <input type="number" value={valores.volume} onChange={e => setValores({ ...valores, volume: Number(e.target.value) })} placeholder="Volume"
+            className="px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+          <input type="number" value={valores.fragmentos_arcanos} onChange={e => setValores({ ...valores, fragmentos_arcanos: Number(e.target.value) })} placeholder="Frag."
+            className="px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        </div>
+        <input value={valores.descritores || ''} onChange={e => setValores({ ...valores, descritores: e.target.value })} placeholder="Descritores"
+          className="w-full px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <input value={valores.observacoes || ''} onChange={e => setValores({ ...valores, observacoes: e.target.value })} placeholder="Observações"
+          className="w-full px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <div className="flex gap-2">
+          <button onClick={async () => { await salvar(valores); setEditando(false); }} className="text-xs px-3 py-1 rounded" style={{ background: 'var(--gold)', color: '#120810' }}>Salvar</button>
+          <button onClick={() => { setValores(item); setEditando(false); }} className="text-xs px-3 py-1" style={{ color: 'var(--text-dim)' }}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between text-sm p-2 rounded" style={{ background: 'var(--surface-2)' }}>
+      <div>
+        <p className="font-medium">{item.nome} {item.quantidade > 1 && `x${item.quantidade}`}</p>
+        {item.descritores && <p className="text-xs" style={{ color: 'var(--gold)' }}>{item.descritores}</p>}
+        {item.observacoes && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{item.observacoes}</p>}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => setEditando(true)} className="text-xs" style={{ color: 'var(--gold)' }}>editar</button>
+        <button onClick={remover} style={{ color: 'var(--danger)' }}>✕</button>
+      </div>
+    </div>
   );
 }
 
@@ -512,6 +649,11 @@ function AbaInventario({ personagemId, itens, recarregar }) {
     recarregar();
   }
 
+  async function salvar(id, valores) {
+    await api.put(`/inventario/${id}`, valores);
+    recarregar();
+  }
+
   const volumeTotal = itens.reduce((s, i) => s + (i.volume || 0) * (i.quantidade || 1), 0);
 
   return (
@@ -519,14 +661,7 @@ function AbaInventario({ personagemId, itens, recarregar }) {
       <Secao titulo={`Itens · volume total ${volumeTotal}`}>
         <div className="space-y-2">
           {itens.map(item => (
-            <div key={item.id} className="flex items-center justify-between text-sm p-2 rounded" style={{ background: 'var(--surface-2)' }}>
-              <div>
-                <p className="font-medium">{item.nome} {item.quantidade > 1 && `x${item.quantidade}`}</p>
-                {item.descritores && <p className="text-xs" style={{ color: 'var(--gold)' }}>{item.descritores}</p>}
-                {item.observacoes && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{item.observacoes}</p>}
-              </div>
-              <button onClick={() => remover(item.id)} style={{ color: 'var(--danger)' }}>✕</button>
-            </div>
+            <ItemInventario key={item.id} item={item} remover={() => remover(item.id)} salvar={(v) => salvar(item.id, v)} />
           ))}
         </div>
       </Secao>

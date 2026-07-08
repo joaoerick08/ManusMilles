@@ -5,10 +5,14 @@ import FichaJogador from './pages/FichaJogador';
 import PainelMestre from './pages/PainelMestre';
 import ImageOverlay from './components/ImageOverlay';
 import ShadowOverlay from './components/ShadowOverlay';
+import TrocarSenha from './components/TrocarSenha';
+import DiceRoller from './components/DiceRoller';
+import MaxuelGame from './components/MaxuelGame';
 
 export default function App() {
   const [usuario, setUsuario] = useState(getUsuario());
   const [meuPersonagem, setMeuPersonagem] = useState(null);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
 
   useEffect(() => {
     if (usuario && usuario.papel === 'player') {
@@ -24,6 +28,10 @@ export default function App() {
         <span className="display text-lg" style={{ color: 'var(--gold)' }}>Manus Milles</span>
         <div className="flex items-center gap-3">
           <span className="text-sm" style={{ color: 'var(--text-dim)' }}>{usuario.nome}</span>
+          <button onClick={() => setTrocandoSenha(true)} className="text-xs px-2 py-1 rounded"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Trocar senha
+          </button>
           <button onClick={() => { sair(); setUsuario(null); }} className="text-xs px-2 py-1 rounded"
             style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Sair
@@ -39,6 +47,9 @@ export default function App() {
 
       <ImageOverlay />
       <ShadowOverlay />
+      <DiceRoller />
+      <MaxuelGame />
+      {trocandoSenha && <TrocarSenha aoFechar={() => setTrocandoSenha(false)} />}
     </div>
   );
 }

@@ -52,7 +52,7 @@ function personagemCompleto(id) {
   if (!p) return null;
   const jsonFields = ['atributos', 'protecoes', 'pontos_sombra', 'testes_morte', 'pericias', 'idiomas', 'ataques'];
   jsonFields.forEach(f => { try { p[f] = JSON.parse(p[f]); } catch { /* mantém string */ } });
-  p.talentos = db.prepare('SELECT * FROM talentos WHERE personagem_id = ?').all(id);
+  p.talentos = db.prepare('SELECT * FROM talentos WHERE personagem_id = ? ORDER BY ordem ASC, id ASC').all(id);
   p.inventario = db.prepare('SELECT * FROM inventario WHERE personagem_id = ?').all(id);
   return p;
 }
@@ -111,9 +111,13 @@ router.put('/personagens/:id', (req, res) => {
 });
 
 // ---------- TALENTOS (habilidades/magias) ----------
-const CAMPOS_TALENTO = ['nome','trilha','tipo','execucao','custo','alcance','alvo','duracao','ataque','descritores','acerto','erro','efeito','especial','descricao','camada'];
+const CAMPOS_TALENTO = ['nome','trilha','tipo','execucao','custo','alcance','alvo','duracao','ataque','descritores','acerto','erro','efeito','especial','descricao','camada','ordem'];
 
 router.post('/personagens/:id/talentos', (req, res) => {
+  if (!('ordem' in req.body)) {
+    const max = db.prepare('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = ?').get(req.params.id);
+    req.body.ordem = max.m + 1;
+  }
   const valores = CAMPOS_TALENTO.map(c => req.body[c] ?? null);
   const info = db.prepare(`INSERT INTO talentos (personagem_id, ${CAMPOS_TALENTO.join(', ')})
     VALUES (?, ${CAMPOS_TALENTO.map(() => '?').join(', ')})`).run(req.params.id, ...valores);
@@ -201,6 +205,99 @@ router.post('/invocar-sombra', apenasMestre, (req, res) => {
   if (!usuario_id) return res.status(400).json({ erro: 'Escolha um jogador' });
   req.io.to(`usuario-${usuario_id}`).emit('invocar-sombra');
   res.json({ ok: true });
+});
+
+// ---------- TROCA DE SENHA ----------
+router.put('/minha-senha', (req, res) => {
+  const { senha_atual, senha_nova } = req.body;
+  if (!senha_atual || !senha_nova) return res.status(400).json({ erro: 'Preencha a senha atual e a nova' });
+  const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.usuario.id);
+  if (!bcrypt.compareSync(senha_atual, usuario.senha_hash)) return res.status(401).json({ erro: 'Senha atual incorreta' });
+  const hash = bcrypt.hashSync(senha_nova, 10);
+  db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hash, req.usuario.id);
+  res.json({ ok: true });
+});
+
+// ---------- EXPORTAR FICHA EM PDF ----------
+router.get('/personagens/:id/pdf', (req, res) => {
+  const p = personagemCompleto(req.params.id);
+  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
+  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
+    return res.status(403).json({ erro: 'Sem permissão' });
+  }
+
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${(p.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
+  doc.pipe(res);
+
+  const cor = '#5a2a63';
+  doc.fontSize(22).fillColor(cor).text(p.nome || 'Personagem', { align: 'left' });
+  doc.fontSize(11).fillColor('#333')
+    .text(`Nível ${p.nivel || 0}  ·  Legado: ${p.legado || '-'}  ·  Herança: ${p.heranca || '-'}`);
+  doc.text(`Antecedente: ${p.antecedente || '-'}   Maldição: ${p.maldicao || '-'}`);
+  doc.moveDown();
+
+  doc.fontSize(14).fillColor(cor).text('Atributos e Proteções');
+  doc.fontSize(10).fillColor('#333');
+  const bonus = p.bonus_proficiencia ?? 2;
+  const nomesAtr = { forca: 'Força', destreza: 'Destreza', constituicao: 'Constituição', inteligencia: 'Inteligência', sabedoria: 'Sabedoria', carisma: 'Carisma' };
+  for (const chave of Object.keys(nomesAtr)) {
+    const valor = p.atributos?.[chave] ?? 0;
+    const treinado = !!p.protecoes?.[chave];
+    const protecao = 10 + valor + (treinado ? bonus : 0);
+    doc.text(`${nomesAtr[chave]}: ${valor}   |   Proteção: ${protecao}${treinado ? ' (treinado)' : ''}`);
+  }
+  doc.moveDown();
+
+  doc.fontSize(14).fillColor(cor).text('Pontos de Vida e Recursos');
+  doc.fontSize(10).fillColor('#333');
+  doc.text(`PV: ${p.pv_atual}/${p.pv_max} (temp: ${p.pv_temp || 0})   Dados de vida: ${p.dados_vida_usados}/${p.dados_vida_total}`);
+  doc.text(`Catarse: ${p.catarse_atual}/${p.catarse_total}   Ênfase: ${p.enfase_atual}/${p.enfase_total}`);
+  doc.text(`Deslocamento: ${p.deslocamento || '-'}   Redução de dano: ${p.reducao_dano || 0}   Iniciativa: ${p.iniciativa_bonus || 0}`);
+  doc.moveDown();
+
+  if (p.pericias?.length) {
+    doc.fontSize(14).fillColor(cor).text('Perícias');
+    doc.fontSize(10).fillColor('#333');
+    p.pericias.forEach(per => doc.text(`${per.nome || '-'}: ${per.total ?? 0}${per.proficiente ? ' (treinado)' : ''}`));
+    doc.moveDown();
+  }
+
+  if (p.ataques?.length) {
+    doc.fontSize(14).fillColor(cor).text('Ataques');
+    doc.fontSize(10).fillColor('#333');
+    p.ataques.forEach(a => doc.text(`${a.nome || '-'} · Teste: ${a.teste || '-'} · Dano: ${a.dano || '-'} · Crítico: ${a.critico || '-'} · Tipo: ${a.tipo || '-'}`));
+    doc.moveDown();
+  }
+
+  if (p.talentos?.length) {
+    doc.fontSize(14).fillColor(cor).text('Talentos, Habilidades e Magias');
+    p.talentos.forEach(t => {
+      doc.moveDown(0.3);
+      doc.fontSize(11).fillColor(cor).text(`${t.nome}${t.custo ? '  (' + t.custo + ')' : ''}`);
+      doc.fontSize(9).fillColor('#333');
+      const linha1 = [t.trilha, t.tipo, t.execucao].filter(Boolean).join(' · ');
+      if (linha1) doc.text(linha1);
+      const linha2 = [t.alcance && `Alcance: ${t.alcance}`, t.alvo && `Alvo: ${t.alvo}`, t.duracao && `Duração: ${t.duracao}`].filter(Boolean).join('   ');
+      if (linha2) doc.text(linha2);
+      if (t.acerto) doc.text(`Acerto: ${t.acerto}`);
+      if (t.erro) doc.text(`Erro: ${t.erro}`);
+      if (t.efeito) doc.text(`Efeito: ${t.efeito}`);
+      if (t.especial) doc.text(`Especial: ${t.especial}`);
+      if (t.descricao) doc.text(t.descricao, { oblique: true });
+    });
+    doc.moveDown();
+  }
+
+  if (p.inventario?.length) {
+    doc.fontSize(14).fillColor(cor).text('Inventário');
+    doc.fontSize(10).fillColor('#333');
+    p.inventario.forEach(i => doc.text(`${i.nome}${i.quantidade > 1 ? ` x${i.quantidade}` : ''} · Volume: ${i.volume || 0} ${i.descritores ? '· ' + i.descritores : ''}`));
+  }
+
+  doc.end();
 });
 
 module.exports = router;
