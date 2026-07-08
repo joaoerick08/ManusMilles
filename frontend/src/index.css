@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Spectral';
+  src: local('Spectral');
+}
+
+:root {
+  --bg: #120810;
+  --surface: #1d0f1a;
+  --surface-2: #281422;
+  --border: #45202f;
+  --text: #ece2e4;
+  --text-dim: #a3899a;
+  --gold: #b23a4f;
+  --shadow: #6d3f9e;
+  --danger: #8c2c3a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Work Sans', -apple-system, sans-serif;
+  margin: 0;
+}
+
+h1, h2, h3, .display {
+  font-family: 'Spectral', Georgia, serif;
+}

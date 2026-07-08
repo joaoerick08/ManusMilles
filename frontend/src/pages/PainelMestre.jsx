@@ -1,0 +1,206 @@
+import { useEffect, useState } from 'react';
+import { api } from '../api';
+import FichaJogador from './FichaJogador';
+
+export default function PainelMestre() {
+  const [personagens, setPersonagens] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [selecionado, setSelecionado] = useState(null);
+  const [abaLateral, setAbaLateral] = useState('fichas');
+
+  async function carregar() {
+    const [{ data: p }, { data: u }] = await Promise.all([
+      api.get('/personagens'),
+      api.get('/usuarios'),
+    ]);
+    setPersonagens(p);
+    setUsuarios(u);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  return (
+    <div className="flex flex-col md:flex-row min-h-screen">
+      <aside className="w-full md:w-64 flex-shrink-0 p-4" style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
+        <h2 className="display text-lg mb-4" style={{ color: 'var(--gold)' }}>Mesa</h2>
+
+        <div className="flex gap-1 mb-4">
+          <button onClick={() => setAbaLateral('fichas')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'fichas' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Fichas
+          </button>
+          <button onClick={() => setAbaLateral('transmitir')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'transmitir' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Transmitir
+          </button>
+          <button onClick={() => setAbaLateral('jogadores')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'jogadores' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Jogadores
+          </button>
+        </div>
+
+        {abaLateral === 'fichas' && (
+          <div className="space-y-1">
+            {personagens.map(p => (
+              <button key={p.id} onClick={() => setSelecionado(p.id)}
+                className="w-full text-left px-3 py-2 rounded text-sm"
+                style={selecionado === p.id ? { background: 'var(--surface-2)', color: 'var(--gold)' } : { color: 'var(--text)' }}>
+                {p.nome || '(sem nome)'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {abaLateral === 'transmitir' && <PainelTransmitir usuarios={usuarios} />}
+        {abaLateral === 'jogadores' && <PainelJogadores usuarios={usuarios} recarregar={carregar} />}
+      </aside>
+
+      <main className="flex-1 py-4">
+        {selecionado
+          ? <FichaJogador personagemId={selecionado} />
+          : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>}
+      </main>
+    </div>
+  );
+}
+
+function PainelTransmitir({ usuarios }) {
+  const [destino, setDestino] = useState('todos');
+  const [arquivo, setArquivo] = useState(null);
+  const [urlExterna, setUrlExterna] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [destinoSombra, setDestinoSombra] = useState(usuarios[0]?.id ?? '');
+
+  async function invocarSombra() {
+    if (!destinoSombra) { setMsg('Escolha um jogador'); return; }
+    try {
+      await api.post('/invocar-sombra', { usuario_id: destinoSombra });
+      setMsg('Sombra invocada!');
+    } catch {
+      setMsg('Erro ao invocar a sombra');
+    }
+  }
+
+  async function enviar() {
+    setEnviando(true); setMsg('');
+    try {
+      const form = new FormData();
+      form.append('destino', destino);
+      if (arquivo) form.append('imagem', arquivo);
+      else if (urlExterna) form.append('url', urlExterna);
+      else { setMsg('Escolha uma imagem ou cole uma URL'); setEnviando(false); return; }
+      await api.post('/broadcast', form);
+      setMsg('Enviado!');
+      setArquivo(null); setUrlExterna('');
+    } catch (err) {
+      const detalhe = err.response
+        ? `Erro ${err.response.status}: ${JSON.stringify(err.response.data)}`
+        : `Sem resposta do servidor (${err.message}). Confira se o backend está rodando.`;
+      setMsg(detalhe);
+      console.error('Falha ao transmitir:', err);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function limpar() {
+    await api.post('/broadcast/limpar', { destino });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs block mb-1" style={{ color: 'var(--text-dim)' }}>Mostrar para</label>
+        <select value={destino} onChange={e => setDestino(e.target.value)}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+          <option value="todos">Todos os jogadores</option>
+          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs block mb-1" style={{ color: 'var(--text-dim)' }}>Imagem, GIF ou vídeo (arquivo)</label>
+        <input type="file" accept="image/*,video/*" onChange={e => setArquivo(e.target.files[0])}
+          className="w-full text-xs" style={{ color: 'var(--text-dim)' }} />
+      </div>
+
+      <div className="text-center text-xs" style={{ color: 'var(--text-dim)' }}>ou</div>
+
+      <input placeholder="Cole uma URL de imagem" value={urlExterna} onChange={e => setUrlExterna(e.target.value)}
+        className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+
+      <button onClick={enviar} disabled={enviando}
+        className="w-full py-2 rounded text-sm font-medium" style={{ background: 'var(--gold)', color: '#120810' }}>
+        {enviando ? 'Enviando...' : 'Mostrar imagem'}
+      </button>
+      <button onClick={limpar} className="w-full py-2 rounded text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+        Limpar tela
+      </button>
+
+      {msg && <p className="text-xs text-center" style={{ color: 'var(--gold)' }}>{msg}</p>}
+
+      <div className="pt-3 mt-3 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <label className="text-xs block mb-1" style={{ color: 'var(--shadow)' }}>Invocar a Sombra</label>
+        <select value={destinoSombra} onChange={e => setDestinoSombra(e.target.value)}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+        </select>
+        <button onClick={invocarSombra} className="w-full py-2 rounded text-sm font-medium"
+          style={{ background: 'var(--shadow)', color: 'var(--text)' }}>
+          A sombra quer te oferecer um acordo...
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PainelJogadores({ usuarios, recarregar }) {
+  const [novo, setNovo] = useState({ nome: '', login: '', senha: '' });
+  const [msg, setMsg] = useState('');
+
+  async function adicionar() {
+    if (!novo.nome || !novo.login || !novo.senha) { setMsg('Preencha tudo'); return; }
+    try {
+      await api.post('/usuarios', novo);
+      setNovo({ nome: '', login: '', senha: '' });
+      setMsg('Jogador criado!');
+      recarregar();
+    } catch (e) {
+      setMsg(e.response?.data?.erro || 'Erro');
+    }
+  }
+
+  async function remover(id) {
+    if (!confirm('Remover este jogador e sua ficha?')) return;
+    await api.delete(`/usuarios/${id}`);
+    recarregar();
+  }
+
+  return (
+    <div className="space-y-3">
+      {usuarios.map(u => (
+        <div key={u.id} className="flex justify-between items-center text-sm p-2 rounded" style={{ background: 'var(--surface-2)' }}>
+          <div>
+            <p>{u.nome}</p>
+            <p className="text-xs" style={{ color: 'var(--text-dim)' }}>login: {u.login}</p>
+          </div>
+          <button onClick={() => remover(u.id)} style={{ color: 'var(--danger)' }}>✕</button>
+        </div>
+      ))}
+
+      <div className="pt-2 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <input placeholder="Nome do jogador" value={novo.nome} onChange={e => setNovo({ ...novo, nome: e.target.value })}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <input placeholder="Login" value={novo.login} onChange={e => setNovo({ ...novo, login: e.target.value })}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <input placeholder="Senha" value={novo.senha} onChange={e => setNovo({ ...novo, senha: e.target.value })}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <button onClick={adicionar} className="w-full py-1.5 rounded text-sm" style={{ background: 'var(--gold)', color: '#120810' }}>
+          Criar jogador
+        </button>
+        {msg && <p className="text-xs text-center" style={{ color: 'var(--text-dim)' }}>{msg}</p>}
+      </div>
+    </div>
+  );
+}
