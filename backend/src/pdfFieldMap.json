@@ -1,0 +1,664 @@
+{
+  "diretos": {
+    "CampoNome": "nome",
+    "CampoPronomes": "pronomes",
+    "CampoJogadore": "jogadore",
+    "CampoLegado": "legado",
+    "CampoHerança": "heranca",
+    "CampoAntecedente": "antecedente",
+    "CampoMaldicao": "maldicao",
+    "CampoIniciativa": "iniciativa_bonus",
+    "CampoRD": "reducao_dano",
+    "CampoDesloc": "deslocamento",
+    "CampoTamanho": "tamanho",
+    "CampoPVMax": "pv_max",
+    "CampoPVAt": "pv_atual",
+    "CampoPVTemp": "pv_temp",
+    "CampoDadosdeVidaTotais": "dados_vida_total",
+    "CampoDadosdeVidaUsados": "dados_vida_usados",
+    "Prof": "bonus_proficiencia",
+    "PEAtual": "enfase_atual",
+    "PETotal": "enfase_total"
+  },
+  "atributos": {
+    "CampoCar": "carisma",
+    "CampoSab": "sabedoria",
+    "CampoInt": "inteligencia",
+    "CampoCon": "constituicao",
+    "CampoDes": "destreza",
+    "CampoFor": "forca"
+  },
+  "protecoes": {
+    "ProtCar": "carisma",
+    "ProtSab": "sabedoria",
+    "ProtInt": "inteligencia",
+    "ProtCon": "constituicao",
+    "ProtDes": "destreza",
+    "ProtFor": "forca"
+  },
+  "catarseCampo": "CampoCatarse",
+  "pericias": {
+    "Apre": "Apresentação",
+    "Arca": "Arcanismo",
+    "Apti1": "Aptidão I",
+    "Apti2": "Aptidão II",
+    "Apti3": "Aptidão III",
+    "Cult": "Cultura",
+    "Dout": "Doutrinas",
+    "Dipl": "Diplomacia",
+    "Furt": "Furtividade",
+    "Inti": "Intimidação",
+    "Medi": "Medicina",
+    "Intu": "Intuição",
+    "Magi": "Magitec",
+    "Mani": "Manipulação",
+    "Mala": "Malandragem",
+    "Natu": "Natureza",
+    "Perc": "Percepção",
+    "Prep": "Preparo Físico"
+  },
+  "itemSlots": [
+    {
+      "nome": "ItemNome",
+      "descritores": "ItemDescritores",
+      "volume": "ItemVol",
+      "fragmentos": "ItemFrag",
+      "descricao": "ItemDesc"
+    },
+    {
+      "nome": "ItemNome 1",
+      "descritores": "ItemDescritores 1",
+      "volume": "ItemVol 1",
+      "fragmentos": "ItemFrag 1",
+      "descricao": "ItemDesc 1"
+    },
+    {
+      "nome": "ItemNome 2",
+      "descritores": "ItemDescritores 2",
+      "volume": "ItemVol 2",
+      "fragmentos": "ItemFrag 2",
+      "descricao": "ItemDesc 2"
+    },
+    {
+      "nome": "ItemNome 3",
+      "descritores": "ItemDescritores 3",
+      "volume": "ItemVol 3",
+      "fragmentos": "ItemFrag 3",
+      "descricao": "ItemDesc 3"
+    },
+    {
+      "nome": "ItemNome 4",
+      "descritores": "ItemDescritores 4",
+      "volume": "ItemVol 4",
+      "fragmentos": "ItemFrag 4",
+      "descricao": "ItemDesc 4"
+    },
+    {
+      "nome": "ItemNome 5",
+      "descritores": "ItemDescritores 5",
+      "volume": "ItemVol 5",
+      "fragmentos": "ItemFrag 5",
+      "descricao": "ItemDesc 5"
+    },
+    {
+      "nome": "ItemNome 6",
+      "descritores": "ItemDescritores 6",
+      "volume": "ItemVol 6",
+      "fragmentos": "ItemFrag 6",
+      "descricao": "ItemDesc 6"
+    },
+    {
+      "nome": "ItemNome 7",
+      "descritores": "ItemDescritores 7",
+      "volume": "ItemVol 7",
+      "fragmentos": "ItemFrag 7",
+      "descricao": "ItemDesc 7"
+    },
+    {
+      "nome": "ItemNome 8",
+      "descritores": "ItemDescritores 8",
+      "volume": "ItemVol 8",
+      "fragmentos": "ItemFrag 8",
+      "descricao": "ItemDesc 8"
+    },
+    {
+      "nome": "ItemNome 9",
+      "descritores": "ItemDescritores 9",
+      "volume": "ItemVol 9",
+      "fragmentos": "ItemFrag 9",
+      "descricao": "ItemDesc 9"
+    },
+    {
+      "nome": "ItemNome 10",
+      "descritores": "ItemDescritores 10",
+      "volume": "ItemVol 10",
+      "fragmentos": "ItemFrag 10",
+      "descricao": "ItemDesc 10"
+    },
+    {
+      "nome": "ItemNome 11",
+      "descritores": "ItemDescritores 11",
+      "volume": "ItemVol 11",
+      "fragmentos": "ItemFrag 11",
+      "descricao": "ItemDesc 11"
+    },
+    {
+      "nome": "ItemNome 12",
+      "descritores": "ItemDescritores 12",
+      "volume": "ItemVol 12",
+      "fragmentos": "ItemFrag 12",
+      "descricao": "ItemDesc 12"
+    },
+    {
+      "nome": "ItemNome 13",
+      "descritores": "ItemDescritores 13",
+      "volume": "ItemVol 13",
+      "fragmentos": "ItemFrag 13",
+      "descricao": "ItemDesc 13"
+    },
+    {
+      "nome": "ItemNome 14",
+      "descritores": "ItemDescritores 14",
+      "volume": "ItemVol 14",
+      "fragmentos": "ItemFrag 14",
+      "descricao": "ItemDesc 14"
+    },
+    {
+      "nome": "ItemNome 15",
+      "descritores": "ItemDescritores 15",
+      "volume": "ItemVol 15",
+      "fragmentos": "ItemFrag 15",
+      "descricao": "ItemDesc 15"
+    },
+    {
+      "nome": "ItemNome 16",
+      "descritores": "ItemDescritores 16",
+      "volume": "ItemVol 16",
+      "fragmentos": "ItemFrag 16",
+      "descricao": "ItemDesc 16"
+    },
+    {
+      "nome": "ItemNome 17",
+      "descritores": "ItemDescritores 17",
+      "volume": "ItemVol 17",
+      "fragmentos": "ItemFrag 17",
+      "descricao": "ItemDesc 17"
+    },
+    {
+      "nome": "ItemNome 18",
+      "descritores": "ItemDescritores 18",
+      "volume": "ItemVol 18",
+      "fragmentos": "ItemFrag 18",
+      "descricao": "ItemDesc 18"
+    },
+    {
+      "nome": "ItemNome 19",
+      "descritores": "ItemDescritores 19",
+      "volume": "ItemVol 19",
+      "fragmentos": "ItemFrag 19",
+      "descricao": "ItemDesc 19"
+    },
+    {
+      "nome": "ItemNome 20",
+      "descritores": "ItemDescritores 20",
+      "volume": "ItemVol 20",
+      "fragmentos": "ItemFrag 20",
+      "descricao": "ItemDesc 20"
+    },
+    {
+      "nome": "ItemNome 21",
+      "descritores": "ItemDescritores 21",
+      "volume": "ItemVol 21",
+      "fragmentos": "ItemFrag 21",
+      "descricao": "ItemDesc 21"
+    },
+    {
+      "nome": "ItemNome 22",
+      "descritores": "ItemDescritores 22",
+      "volume": "ItemVol 22",
+      "fragmentos": "ItemFrag 22",
+      "descricao": "ItemDesc 22"
+    },
+    {
+      "nome": "ItemNome 23",
+      "descritores": "ItemDescritores 23",
+      "volume": "ItemVol 23",
+      "fragmentos": "ItemFrag 23",
+      "descricao": "ItemDesc 23"
+    }
+  ],
+  "gruposHabilidade": [
+    {
+      "campoNome": "nome habilidade 37",
+      "extras": [
+        "Campo de texto 188",
+        "Campo de texto 189"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 38",
+      "extras": [
+        "Campo de texto 238",
+        "Campo de texto 239"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 39",
+      "extras": [
+        "Campo de texto 240",
+        "Campo de texto 241"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 40",
+      "extras": [
+        "Campo de texto 242",
+        "Campo de texto 243"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 41",
+      "extras": [
+        "Campo de texto 244",
+        "Campo de texto 245"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 42",
+      "extras": [
+        "Campo de texto 246",
+        "Campo de texto 247"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 43",
+      "extras": [
+        "Campo de texto 248",
+        "Campo de texto 249"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 44",
+      "extras": [
+        "Campo de texto 250",
+        "Campo de texto 251"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 45",
+      "extras": [
+        "Campo de texto 252",
+        "Campo de texto 253"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 46",
+      "extras": [
+        "Campo de texto 254",
+        "Campo de texto 255"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 47",
+      "extras": [
+        "Campo de texto 256",
+        "Campo de texto 257"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 48",
+      "extras": [
+        "Campo de texto 258",
+        "Campo de texto 259"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 49",
+      "extras": [
+        "Campo de texto 260",
+        "Campo de texto 261"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 50",
+      "extras": [
+        "Campo de texto 262",
+        "Campo de texto 263"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 51",
+      "extras": [
+        "Campo de texto 264",
+        "Campo de texto 265"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 52",
+      "extras": [
+        "Campo de texto 266",
+        "Campo de texto 267"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 53",
+      "extras": [
+        "Campo de texto 268",
+        "Campo de texto 269"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 54",
+      "extras": [
+        "Campo de texto 270",
+        "Campo de texto 271"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 57",
+      "extras": [
+        "Campo de texto 276",
+        "Campo de texto 277"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 56",
+      "extras": [
+        "Campo de texto 274",
+        "Campo de texto 275"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 55",
+      "extras": [
+        "Campo de texto 272",
+        "Campo de texto 273"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 58",
+      "extras": [
+        "Campo de texto 278",
+        "Campo de texto 279"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 59",
+      "extras": [
+        "Campo de texto 280",
+        "Campo de texto 281"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 60",
+      "extras": [
+        "Campo de texto 282",
+        "Campo de texto 283"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 61",
+      "extras": [
+        "Campo de texto 284",
+        "Campo de texto 285"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 62",
+      "extras": [
+        "Campo de texto 286",
+        "Campo de texto 287"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 63",
+      "extras": [
+        "Campo de texto 288",
+        "Campo de texto 289"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 13",
+      "extras": [
+        "Campo de texto 301",
+        "Campo de texto 302",
+        "Campo de texto 303",
+        "Campo de texto 413"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 16",
+      "extras": [
+        "Campo de texto 3010",
+        "Campo de texto 3011",
+        "Campo de texto 3012",
+        "Campo de texto 416"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 19",
+      "extras": [
+        "Campo de texto 3019",
+        "Campo de texto 3020",
+        "Campo de texto 3021",
+        "Campo de texto 419"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 14",
+      "extras": [
+        "Campo de texto 304",
+        "Campo de texto 305",
+        "Campo de texto 306",
+        "Campo de texto 414"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 17",
+      "extras": [
+        "Campo de texto 3013",
+        "Campo de texto 3014",
+        "Campo de texto 3015",
+        "Campo de texto 417"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 20",
+      "extras": [
+        "Campo de texto 3022",
+        "Campo de texto 3023",
+        "Campo de texto 3024",
+        "Campo de texto 420"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 15",
+      "extras": [
+        "Campo de texto 307",
+        "Campo de texto 308",
+        "Campo de texto 309",
+        "Campo de texto 415"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 18",
+      "extras": [
+        "Campo de texto 3016",
+        "Campo de texto 3017",
+        "Campo de texto 3018",
+        "Campo de texto 418"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 21",
+      "extras": [
+        "Campo de texto 3025",
+        "Campo de texto 3026",
+        "Campo de texto 3027",
+        "Campo de texto 421"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 22",
+      "extras": [
+        "Campo de texto 3028",
+        "Campo de texto 3029",
+        "Campo de texto 3030",
+        "Campo de texto 422"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 23",
+      "extras": [
+        "Campo de texto 3031",
+        "Campo de texto 3032",
+        "Campo de texto 3033",
+        "Campo de texto 423"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 24",
+      "extras": [
+        "Campo de texto 3034",
+        "Campo de texto 3035",
+        "Campo de texto 3036",
+        "Campo de texto 424"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 25",
+      "extras": [
+        "Campo de texto 3037",
+        "Campo de texto 3038",
+        "Campo de texto 3039",
+        "Campo de texto 425"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 26",
+      "extras": [
+        "Campo de texto 3040",
+        "Campo de texto 3041",
+        "Campo de texto 3042",
+        "Campo de texto 426"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 27",
+      "extras": [
+        "Campo de texto 3043",
+        "Campo de texto 3044",
+        "Campo de texto 3045",
+        "Campo de texto 427"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 28",
+      "extras": [
+        "Campo de texto 3046",
+        "Campo de texto 3047",
+        "Campo de texto 3048",
+        "Campo de texto 428"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 29",
+      "extras": [
+        "Campo de texto 3049",
+        "Campo de texto 3050",
+        "Campo de texto 3051",
+        "Campo de texto 429"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 30",
+      "extras": [
+        "Campo de texto 3052",
+        "Campo de texto 3053",
+        "Campo de texto 3054",
+        "Campo de texto 430"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 31",
+      "extras": [
+        "Campo de texto 3055",
+        "Campo de texto 3056",
+        "Campo de texto 3057",
+        "Campo de texto 431"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 32",
+      "extras": [
+        "Campo de texto 3058",
+        "Campo de texto 3059",
+        "Campo de texto 3060",
+        "Campo de texto 432"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 33",
+      "extras": [
+        "Campo de texto 3061",
+        "Campo de texto 3062",
+        "Campo de texto 3063",
+        "Campo de texto 433"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 34",
+      "extras": [
+        "Campo de texto 3064",
+        "Campo de texto 3065",
+        "Campo de texto 3066",
+        "Campo de texto 434"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 35",
+      "extras": [
+        "Campo de texto 3067",
+        "Campo de texto 3068",
+        "Campo de texto 3069",
+        "Campo de texto 435"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 36",
+      "extras": [
+        "Campo de texto 3070",
+        "Campo de texto 3071",
+        "Campo de texto 3072",
+        "Campo de texto 436"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 64",
+      "extras": [
+        "Campo de texto 3073",
+        "Campo de texto 3074",
+        "Campo de texto 3075",
+        "Campo de texto 437"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 65",
+      "extras": [
+        "Campo de texto 3076",
+        "Campo de texto 3077",
+        "Campo de texto 3078",
+        "Campo de texto 438"
+      ]
+    },
+    {
+      "campoNome": "nome habilidade 66",
+      "extras": [
+        "Campo de texto 3079",
+        "Campo de texto 3080",
+        "Campo de texto 3081",
+        "Campo de texto 439"
+      ]
+    }
+  ]
+}

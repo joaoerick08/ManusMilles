@@ -86,7 +86,30 @@ export default function FichaJogador({ personagemId }) {
 
 function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha, exportarPdf }) {
   const inputRef = useRef(null);
+  const inputPdfRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [msgImport, setMsgImport] = useState('');
+
+  async function importarPdf(e) {
+    const arquivo = e.target.files[0];
+    if (!arquivo) return;
+    setImportando(true);
+    setMsgImport('');
+    try {
+      const form = new FormData();
+      form.append('pdf', arquivo);
+      const { data } = await api.post(`/personagens/${personagemId}/importar-pdf`, form);
+      setFicha(data.ficha);
+      setMsgImport(`Importado! ${data.habilidadesImportadas} habilidades/magias e ${data.itensImportados} itens.`);
+    } catch (err) {
+      setMsgImport(err.response?.data?.erro || 'Não foi possível importar esse PDF.');
+    } finally {
+      setImportando(false);
+      e.target.value = '';
+      setTimeout(() => setMsgImport(''), 6000);
+    }
+  }
 
   async function trocarAvatar(e) {
     const arquivo = e.target.files[0];
@@ -141,7 +164,13 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha, exportarPdf 
             className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             📄 PDF
           </button>
+          <button onClick={() => inputPdfRef.current?.click()} title="Importar ficha de um PDF preenchido"
+            className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--gold)', color: 'var(--gold)' }}>
+            {importando ? '...' : '📥 Importar'}
+          </button>
+          <input ref={inputPdfRef} type="file" accept="application/pdf" hidden onChange={importarPdf} />
         </div>
+        {msgImport && <p className="text-[10px] mt-1" style={{ color: 'var(--gold)' }}>{msgImport}</p>}
       </div>
     </div>
   );

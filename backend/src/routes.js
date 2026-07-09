@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./db');
 const { autenticar, apenasMestre } = require('./auth');
+const { PDFDocument } = require('pdf-lib');
+const fieldMap = require('./pdfFieldMap.json');
 
 const router = express.Router();
 
@@ -17,6 +19,8 @@ const upload = multer({
   }),
   limits: { fileSize: 200 * 1024 * 1024 } // 200MB, dá espaço pra vídeos curtos
 });
+
+const uploadMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 router.use('/uploads', express.static(uploadDir));
 router.use(autenticar);
@@ -231,6 +235,163 @@ router.put('/minha-senha', (req, res) => {
   const hash = bcrypt.hashSync(senha_nova, 10);
   db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hash, req.usuario.id);
   res.json({ ok: true });
+});
+
+// ---------- IMPORTAR FICHA DE PDF PREENCHIDO ----------
+router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async (req, res) => {
+  const p = db.prepare('SELECT * FROM personagens WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
+  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
+    return res.status(403).json({ erro: 'Sem permissão' });
+  }
+  if (!req.file) return res.status(400).json({ erro: 'Envie um arquivo PDF' });
+
+  try {
+    const pdfDoc = await PDFDocument.load(req.file.buffer);
+    const form = pdfDoc.getForm();
+
+    const lerTexto = (nomeCampo) => {
+      try {
+        const v = form.getTextField(nomeCampo).getText();
+        return v ? v.trim() : '';
+      } catch { return ''; }
+    };
+    const lerNumero = (nomeCampo) => {
+      const v = lerTexto(nomeCampo);
+      if (!v) return null;
+      const n = parseFloat(v.replace(',', '.'));
+      return isNaN(n) ? null : n;
+    };
+
+    const CAMPOS_NUMERICOS = new Set(['iniciativa_bonus','reducao_dano','pv_max','pv_atual','pv_temp',
+      'dados_vida_total','dados_vida_usados','bonus_proficiencia','enfase_atual','enfase_total']);
+
+    const atualizacoes = {};
+    for (const [campoPdf, campoNosso] of Object.entries(fieldMap.diretos)) {
+      if (CAMPOS_NUMERICOS.has(campoNosso)) {
+        const n = lerNumero(campoPdf);
+        if (n !== null) atualizacoes[campoNosso] = n;
+      } else {
+        const v = lerTexto(campoPdf);
+        if (v) atualizacoes[campoNosso] = v;
+      }
+    }
+
+    const atributosAtuais = JSON.parse(p.atributos || '{}');
+    const atributos = { ...atributosAtuais };
+    for (const [campoPdf, chave] of Object.entries(fieldMap.atributos)) {
+      const n = lerNumero(campoPdf);
+      if (n !== null) atributos[chave] = n;
+    }
+    atualizacoes.atributos = atributos;
+
+    const prof = atualizacoes.bonus_proficiencia ?? p.bonus_proficiencia ?? 2;
+    const protecoesAtuais = JSON.parse(p.protecoes || '{}');
+    const protecoes = { ...protecoesAtuais };
+    for (const [campoPdf, chave] of Object.entries(fieldMap.protecoes)) {
+      const protValor = lerNumero(campoPdf);
+      if (protValor === null) continue;
+      const base = atributos[chave] ?? 0;
+      const diferenca = protValor - 10 - base;
+      protecoes[chave] = diferenca >= Math.max(1, Math.floor(prof / 2)) ? true : diferenca > 0;
+    }
+    atualizacoes.protecoes = protecoes;
+
+    const catarseTxt = lerTexto(fieldMap.catarseCampo);
+    if (catarseTxt) {
+      const partes = catarseTxt.split('/').map(s => parseFloat(s.trim().replace(',', '.')));
+      if (partes.length === 2 && !isNaN(partes[0]) && !isNaN(partes[1])) {
+        atualizacoes.catarse_atual = partes[0];
+        atualizacoes.catarse_total = partes[1];
+      } else if (!isNaN(partes[0])) {
+        atualizacoes.catarse_atual = partes[0];
+      }
+    }
+
+    const pericias = [];
+    for (const [abrev, nomeCompleto] of Object.entries(fieldMap.pericias)) {
+      const total = lerNumero(`${abrev}Tot`);
+      const outros = lerTexto(`${abrev}Out`);
+      if (total !== null || outros) {
+        pericias.push({ nome: nomeCompleto, total: total ?? 0, proficiente: false, outros: outros || undefined });
+      }
+    }
+    if (pericias.length) atualizacoes.pericias = pericias;
+
+    const CAMPOS_VALIDOS = ['nome','pronomes','jogadore','legado','heranca','antecedente','maldicao',
+      'iniciativa_bonus','reducao_dano','deslocamento','tamanho','pv_max','pv_atual','pv_temp',
+      'dados_vida_total','dados_vida_usados','bonus_proficiencia','enfase_atual','enfase_total',
+      'catarse_atual','catarse_total','atributos','protecoes','pericias'];
+    const sets = []; const valores = [];
+    for (const campo of CAMPOS_VALIDOS) {
+      if (campo in atualizacoes) {
+        let v = atualizacoes[campo];
+        if (typeof v === 'object') v = JSON.stringify(v);
+        sets.push(`${campo} = ?`);
+        valores.push(v);
+      }
+    }
+    if (sets.length) {
+      valores.push(req.params.id);
+      db.prepare(`UPDATE personagens SET ${sets.join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`).run(...valores);
+    }
+
+    let itensImportados = 0;
+    for (const slot of fieldMap.itemSlots) {
+      const nome = lerTexto(slot.nome);
+      if (!nome) continue;
+      const descritores = lerTexto(slot.descritores);
+      const volume = lerNumero(slot.volume) || 0;
+      const fragmentos = lerNumero(slot.fragmentos) || 0;
+      const descricao = lerTexto(slot.descricao);
+      db.prepare(`INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
+        VALUES (?,?,?,?,?,?,?)`).run(req.params.id, nome, descritores, volume, fragmentos, 1, descricao);
+      itensImportados++;
+    }
+
+    let habilidadesImportadas = 0;
+    const maxOrdemRow = db.prepare('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = ?').get(req.params.id);
+    let ordemAtual = maxOrdemRow.m + 1;
+    for (const grupo of fieldMap.gruposHabilidade) {
+      const nome = lerTexto(grupo.campoNome);
+      if (!nome) continue;
+      const valoresExtras = grupo.extras.map(lerTexto);
+      let dados;
+      if (grupo.extras.length === 4) {
+        dados = {
+          tipo: 'Magia',
+          alcance: valoresExtras[0] || null,
+          descritores: valoresExtras[1] || null,
+          efeito: valoresExtras[2] || null,
+          especial: valoresExtras[3] || null,
+          descricao: null,
+        };
+      } else {
+        dados = {
+          tipo: 'Habilidade',
+          alcance: null,
+          descritores: valoresExtras[0] || null,
+          efeito: null,
+          especial: null,
+          descricao: valoresExtras[1] || null,
+        };
+      }
+      db.prepare(`INSERT INTO talentos (personagem_id, nome, tipo, trilha, execucao, custo, alcance, alvo, duracao, ataque, descritores, acerto, erro, efeito, especial, descricao, camada, ordem)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        req.params.id, nome, dados.tipo, null, 'Ação', null,
+        dados.alcance, null, null, null, dados.descritores,
+        null, null, dados.efeito, dados.especial, dados.descricao, null, ordemAtual++
+      );
+      habilidadesImportadas++;
+    }
+
+    const atualizado = personagemCompleto(req.params.id);
+    req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
+    res.json({ ok: true, itensImportados, habilidadesImportadas, ficha: atualizado });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ erro: 'Não consegui ler esse PDF. Confira se é o arquivo da ficha editável do Skyfall.' });
+  }
 });
 
 // ---------- EXPORTAR FICHA EM PDF ----------
