@@ -1,6 +1,7 @@
 node_modules/
 backend/skyfall.db
 backend/uploads/
+backend/.env
 frontend/dist/
 .DS_Store
 *.log

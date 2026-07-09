@@ -9,9 +9,21 @@ em tempo real.
 
 ```
 skyfall-app/
-  backend/     -> API (Node/Express + Socket.io + SQLite)
+  backend/     -> API (Node/Express + Socket.io + PostgreSQL)
   frontend/    -> Site (React/Vite)
 ```
+
+## Banco de dados (Supabase, gratuito e persistente)
+
+1. Crie uma conta em [supabase.com](https://supabase.com) e um novo projeto (gratuito)
+2. No painel do projeto, vá em **Project Settings → Database → Connection string**
+   e copie a URI no formato `postgresql://postgres:[SUA-SENHA]@...`
+3. Copie o arquivo `backend/.env.example` pra `backend/.env` e cole essa URL em
+   `DATABASE_URL`
+
+> ⚠️ Se o projeto do Supabase ficar **7 dias sem nenhum acesso**, ele pausa sozinho
+> (não perde nada, só precisa entrar no painel do Supabase e clicar em "reativar"
+> antes de usar de novo). É bem diferente de perder os dados — é só uma pausa.
 
 ## Rodando localmente (pra testar)
 
@@ -23,12 +35,12 @@ cd backend
 npm install
 node src/server.js
 ```
-Na primeira vez ele cria o banco `skyfall.db` e um usuário mestre padrão:
+Na primeira vez ele cria as tabelas no banco e um usuário mestre padrão:
 - login: `mestre`
 - senha: `mestre123`
 
-**Troque essa senha assim que possível** (ainda não tem tela de troca de senha pelo
-site — se quiser, eu adiciono depois).
+**Troque essa senha assim que possível** (tem uma tela de "Trocar senha" no topo do
+site depois de logar).
 
 **Terminal 2 — frontend:**
 ```bash
@@ -59,17 +71,14 @@ Abra o link que aparecer (geralmente `http://localhost:5173`).
 ## Colocando no ar de graça no Render
 
 Você vai criar **dois serviços** no Render: um pro backend (API) e um pro frontend (site).
-Antes de tudo, seu código precisa estar num repositório do GitHub (se ainda não estiver,
-crie um repo novo, suba os arquivos, e siga daqui).
+Antes de tudo, seu código precisa estar num repositório do GitHub, e você precisa já
+ter criado o banco no Supabase (seção acima) com a `DATABASE_URL` em mãos.
 
-> ⚠️ **Importante sobre o plano free do Render:** o disco é temporário. Isso significa
-> que o arquivo `skyfall.db` (onde ficam as fichas) e a pasta `uploads` (avatares e
-> imagens transmitidas) **podem ser apagados toda vez que você fizer um novo deploy**
-> (subir uma atualização do código). Enquanto você só usa o site sem fazer deploy de
-> novo, os dados ficam salvos normalmente. Pra não perder nada, baixe o arquivo
-> `backend/skyfall.db` de vez em quando como backup, ou, se topar pagar uns $7/mês
-> depois, dá pra adicionar um "disco persistente" que resolve isso de vez. Posso te
-> ajudar com isso quando quiser.
+> ℹ️ Como o banco agora fica no Supabase (fora do Render), as fichas não somem mais
+> quando o backend reinicia ou "dorme" — só a **pasta de uploads** (avatares e imagens
+> transmitidas pelo mestre) ainda é temporária no plano free do Render, já que fica
+> salva localmente no servidor. Fichas e dados ficam seguros; só uma imagem ou outra
+> enviada pode precisar ser reenviada depois de um tempo parado.
 
 ### 1. Backend (API)
 
@@ -82,8 +91,11 @@ crie um repo novo, suba os arquivos, e siga daqui).
    - **Build Command:** `npm install`
    - **Start Command:** `node src/server.js`
    - **Instance Type:** Free
-5. Clique em **Create Web Service** e espere o deploy terminar
-6. Copie a URL que o Render gerou (algo como `https://manus-milles-api.onrender.com`)
+5. Antes de criar, adicione as **Environment Variables**:
+   - **Key:** `DATABASE_URL` → **Value:** a connection string do Supabase
+   - **Key:** `JWT_SECRET` → **Value:** qualquer texto aleatório grande (ex: gere um em [randomkeygen.com](https://randomkeygen.com))
+6. Clique em **Create Web Service** e espere o deploy terminar
+7. Copie a URL que o Render gerou (algo como `https://manus-milles-api.onrender.com`)
 
 ### 2. Frontend (site)
 
@@ -100,19 +112,16 @@ crie um repo novo, suba os arquivos, e siga daqui).
 
 Pronto — depois do deploy, o link do site (frontend) é o que você compartilha com os
 6 players. Cada vez que você mudar o código e quiser atualizar o site no ar, é só dar
-push no GitHub que o Render redesenha sozinho (mas lembre do aviso sobre o banco lá em cima).
+push no GitHub que o Render redesenha sozinho.
 
 ### Detalhe sobre o plano free
 
 O backend free do Render "dorme" depois de alguns minutos sem uso, e demora uns 30-60
 segundos pra acordar na primeira requisição depois disso — é normal, só avise os
 players que a primeira ficha pode demorar um pouco pra carregar no começo da sessão.
+O banco no Supabase, separadamente, pausa depois de 7 dias sem acesso — se isso
+acontecer, entre no painel do Supabase e clique em "reativar" antes da próxima sessão.
 
 ## Próximos passos possíveis
 
-- Tela de troca de senha
-- Rolagem de dados (tipo o C.R.I.S)
-- Upload de foto de perfil do personagem direto na ficha
-- Exportar ficha em PDF
-
-Me chama quando quiser evoluir qualquer uma dessas partes.
+Me chama quando quiser evoluir qualquer parte do site.

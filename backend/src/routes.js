@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const db = require('./db');
+const { pool } = require('./db');
 const { autenticar, apenasMestre } = require('./auth');
 const { PDFDocument } = require('pdf-lib');
 const fieldMap = require('./pdfFieldMap.json');
@@ -17,63 +17,66 @@ const upload = multer({
     destination: (req, file, cb) => cb(null, uploadDir),
     filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'))
   }),
-  limits: { fileSize: 200 * 1024 * 1024 } // 200MB, dá espaço pra vídeos curtos
+  limits: { fileSize: 200 * 1024 * 1024 }
 });
-
 const uploadMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 router.use('/uploads', express.static(uploadDir));
 router.use(autenticar);
 
-// ---------- USUÁRIOS (players) - só o mestre gerencia ----------
-router.get('/usuarios', apenasMestre, (req, res) => {
-  const usuarios = db.prepare("SELECT id, nome, login, papel FROM usuarios WHERE papel = 'player'").all();
-  res.json(usuarios);
+// ---------- USUÁRIOS (players) ----------
+router.get('/usuarios', apenasMestre, async (req, res) => {
+  const { rows } = await pool.query("SELECT id, nome, login, papel FROM usuarios WHERE papel = 'player'");
+  res.json(rows);
 });
 
-router.post('/usuarios', apenasMestre, (req, res) => {
+router.post('/usuarios', apenasMestre, async (req, res) => {
   const { nome, login, senha } = req.body;
   if (!nome || !login || !senha) return res.status(400).json({ erro: 'Preencha nome, login e senha' });
   const hash = bcrypt.hashSync(senha, 10);
   try {
-    const info = db.prepare("INSERT INTO usuarios (nome, login, senha_hash, papel) VALUES (?, ?, ?, 'player')")
-      .run(nome, login, hash);
-    db.prepare('INSERT INTO personagens (usuario_id, nome) VALUES (?, ?)').run(info.lastInsertRowid, nome);
-    res.json({ id: info.lastInsertRowid });
+    const { rows } = await pool.query(
+      "INSERT INTO usuarios (nome, login, senha_hash, papel) VALUES ($1, $2, $3, 'player') RETURNING id",
+      [nome, login, hash]
+    );
+    await pool.query('INSERT INTO personagens (usuario_id, nome) VALUES ($1, $2)', [rows[0].id, nome]);
+    res.json({ id: rows[0].id });
   } catch (e) {
     res.status(400).json({ erro: 'Login já existe' });
   }
 });
 
-router.delete('/usuarios/:id', apenasMestre, (req, res) => {
-  db.prepare('DELETE FROM usuarios WHERE id = ?').run(req.params.id);
+router.delete('/usuarios/:id', apenasMestre, async (req, res) => {
+  await pool.query('DELETE FROM usuarios WHERE id = $1', [req.params.id]);
   res.json({ ok: true });
 });
 
 // ---------- PERSONAGENS ----------
-function personagemCompleto(id) {
-  const p = db.prepare('SELECT * FROM personagens WHERE id = ?').get(id);
+async function personagemCompleto(id) {
+  const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [id]);
+  const p = rows[0];
   if (!p) return null;
-  const jsonFields = ['atributos', 'protecoes', 'pontos_sombra', 'testes_morte', 'pericias', 'idiomas', 'ataques'];
-  jsonFields.forEach(f => { try { p[f] = JSON.parse(p[f]); } catch { /* mantém string */ } });
-  p.talentos = db.prepare('SELECT * FROM talentos WHERE personagem_id = ? ORDER BY ordem ASC, id ASC').all(id);
-  p.inventario = db.prepare('SELECT * FROM inventario WHERE personagem_id = ?').all(id);
+  const talentos = await pool.query('SELECT * FROM talentos WHERE personagem_id = $1 ORDER BY ordem ASC, id ASC', [id]);
+  const inventario = await pool.query('SELECT * FROM inventario WHERE personagem_id = $1', [id]);
+  p.talentos = talentos.rows;
+  p.inventario = inventario.rows;
   return p;
 }
 
-// Mestre vê todos; player vê só o seu
-router.get('/personagens', (req, res) => {
+router.get('/personagens', async (req, res) => {
   let ids;
   if (req.usuario.papel === 'mestre') {
-    ids = db.prepare('SELECT id FROM personagens').all().map(r => r.id);
+    const { rows } = await pool.query('SELECT id FROM personagens');
+    ids = rows.map(r => r.id);
   } else {
-    ids = db.prepare('SELECT id FROM personagens WHERE usuario_id = ?').all(req.usuario.id).map(r => r.id);
+    const { rows } = await pool.query('SELECT id FROM personagens WHERE usuario_id = $1', [req.usuario.id]);
+    ids = rows.map(r => r.id);
   }
-  res.json(ids.map(personagemCompleto));
+  res.json(await Promise.all(ids.map(personagemCompleto)));
 });
 
-router.get('/personagens/:id', (req, res) => {
-  const p = personagemCompleto(req.params.id);
+router.get('/personagens/:id', async (req, res) => {
+  const p = await personagemCompleto(req.params.id);
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
   if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
     return res.status(403).json({ erro: 'Sem permissão' });
@@ -89,27 +92,27 @@ const CAMPOS_EDITAVEIS = [
   'iniciativa_bonus','pericias','idiomas','ataques'
 ];
 
-router.put('/personagens/:id', (req, res) => {
-  const p = db.prepare('SELECT * FROM personagens WHERE id = ?').get(req.params.id);
+router.put('/personagens/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
+  const p = rows[0];
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
   if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
     return res.status(403).json({ erro: 'Sem permissão' });
   }
-  const sets = [];
-  const valores = [];
+  const sets = []; const valores = [];
+  let i = 1;
   for (const campo of CAMPOS_EDITAVEIS) {
     if (campo in req.body) {
-      let v = req.body[campo];
-      if (typeof v === 'object') v = JSON.stringify(v);
-      sets.push(`${campo} = ?`);
-      valores.push(v);
+      sets.push(`${campo} = $${i++}`);
+      valores.push(req.body[campo]);
     }
   }
-  if (sets.length === 0) return res.json(personagemCompleto(req.params.id));
-  sets.push("atualizado_em = CURRENT_TIMESTAMP");
-  valores.push(req.params.id);
-  db.prepare(`UPDATE personagens SET ${sets.join(', ')} WHERE id = ?`).run(...valores);
-  const atualizado = personagemCompleto(req.params.id);
+  if (sets.length > 0) {
+    sets.push('atualizado_em = NOW()');
+    valores.push(req.params.id);
+    await pool.query(`UPDATE personagens SET ${sets.join(', ')} WHERE id = $${i}`, valores);
+  }
+  const atualizado = await personagemCompleto(req.params.id);
   req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
   res.json(atualizado);
 });
@@ -117,68 +120,110 @@ router.put('/personagens/:id', (req, res) => {
 // ---------- TALENTOS (habilidades/magias) ----------
 const CAMPOS_TALENTO = ['nome','trilha','tipo','execucao','custo','alcance','alvo','duracao','ataque','descritores','acerto','erro','efeito','especial','descricao','camada','ordem'];
 
-function emitirFicha(req, personagemId) {
-  const atualizado = personagemCompleto(personagemId);
+async function emitirFicha(req, personagemId) {
+  const atualizado = await personagemCompleto(personagemId);
   if (atualizado) req.io.to(`personagem-${personagemId}`).emit('ficha-atualizada', atualizado);
 }
 
-router.post('/personagens/:id/talentos', (req, res) => {
+router.post('/personagens/:id/talentos', async (req, res) => {
   if (!('ordem' in req.body)) {
-    const max = db.prepare('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = ?').get(req.params.id);
-    req.body.ordem = max.m + 1;
+    const { rows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = $1', [req.params.id]);
+    req.body.ordem = rows[0].m + 1;
   }
   const valores = CAMPOS_TALENTO.map(c => req.body[c] ?? null);
-  const info = db.prepare(`INSERT INTO talentos (personagem_id, ${CAMPOS_TALENTO.join(', ')})
-    VALUES (?, ${CAMPOS_TALENTO.map(() => '?').join(', ')})`).run(req.params.id, ...valores);
-  emitirFicha(req, req.params.id);
-  res.json({ id: info.lastInsertRowid });
+  const placeholders = CAMPOS_TALENTO.map((_, i) => `$${i + 2}`).join(', ');
+  const { rows } = await pool.query(
+    `INSERT INTO talentos (personagem_id, ${CAMPOS_TALENTO.join(', ')}) VALUES ($1, ${placeholders}) RETURNING id`,
+    [req.params.id, ...valores]
+  );
+  await emitirFicha(req, req.params.id);
+  res.json({ id: rows[0].id });
 });
 
-router.put('/talentos/:id', (req, res) => {
-  const talento = db.prepare('SELECT personagem_id FROM talentos WHERE id = ?').get(req.params.id);
+router.put('/talentos/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT personagem_id FROM talentos WHERE id = $1', [req.params.id]);
+  const talento = rows[0];
   const sets = []; const valores = [];
-  for (const c of CAMPOS_TALENTO) if (c in req.body) { sets.push(`${c} = ?`); valores.push(req.body[c]); }
-  if (sets.length) { valores.push(req.params.id); db.prepare(`UPDATE talentos SET ${sets.join(', ')} WHERE id = ?`).run(...valores); }
-  if (talento) emitirFicha(req, talento.personagem_id);
+  let i = 1;
+  for (const c of CAMPOS_TALENTO) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(req.body[c]); }
+  if (sets.length) {
+    valores.push(req.params.id);
+    await pool.query(`UPDATE talentos SET ${sets.join(', ')} WHERE id = $${i}`, valores);
+  }
+  if (talento) await emitirFicha(req, talento.personagem_id);
   res.json({ ok: true });
 });
 
-router.delete('/talentos/:id', (req, res) => {
-  const talento = db.prepare('SELECT personagem_id FROM talentos WHERE id = ?').get(req.params.id);
-  db.prepare('DELETE FROM talentos WHERE id = ?').run(req.params.id);
-  if (talento) emitirFicha(req, talento.personagem_id);
+router.delete('/talentos/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT personagem_id FROM talentos WHERE id = $1', [req.params.id]);
+  const talento = rows[0];
+  await pool.query('DELETE FROM talentos WHERE id = $1', [req.params.id]);
+  if (talento) await emitirFicha(req, talento.personagem_id);
   res.json({ ok: true });
 });
 
 // ---------- INVENTÁRIO ----------
-router.post('/personagens/:id/inventario', (req, res) => {
+router.post('/personagens/:id/inventario', async (req, res) => {
   const { nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes } = req.body;
-  const info = db.prepare(`INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
-    VALUES (?,?,?,?,?,?,?)`).run(req.params.id, nome, descritores, volume || 0, fragmentos_arcanos || 0, quantidade || 1, observacoes);
-  emitirFicha(req, req.params.id);
-  res.json({ id: info.lastInsertRowid });
+  const { rows } = await pool.query(
+    `INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [req.params.id, nome, descritores, volume || 0, fragmentos_arcanos || 0, quantidade || 1, observacoes]
+  );
+  await emitirFicha(req, req.params.id);
+  res.json({ id: rows[0].id });
 });
 
-router.put('/inventario/:id', (req, res) => {
-  const item = db.prepare('SELECT personagem_id FROM inventario WHERE id = ?').get(req.params.id);
+router.put('/inventario/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT personagem_id FROM inventario WHERE id = $1', [req.params.id]);
+  const item = rows[0];
   const campos = ['nome','descritores','volume','fragmentos_arcanos','quantidade','observacoes'];
   const sets = []; const valores = [];
-  for (const c of campos) if (c in req.body) { sets.push(`${c} = ?`); valores.push(req.body[c]); }
-  if (sets.length) { valores.push(req.params.id); db.prepare(`UPDATE inventario SET ${sets.join(', ')} WHERE id = ?`).run(...valores); }
-  if (item) emitirFicha(req, item.personagem_id);
+  let i = 1;
+  for (const c of campos) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(req.body[c]); }
+  if (sets.length) {
+    valores.push(req.params.id);
+    await pool.query(`UPDATE inventario SET ${sets.join(', ')} WHERE id = $${i}`, valores);
+  }
+  if (item) await emitirFicha(req, item.personagem_id);
   res.json({ ok: true });
 });
 
-router.delete('/inventario/:id', (req, res) => {
-  const item = db.prepare('SELECT personagem_id FROM inventario WHERE id = ?').get(req.params.id);
-  db.prepare('DELETE FROM inventario WHERE id = ?').run(req.params.id);
-  if (item) emitirFicha(req, item.personagem_id);
+router.delete('/inventario/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT personagem_id FROM inventario WHERE id = $1', [req.params.id]);
+  const item = rows[0];
+  await pool.query('DELETE FROM inventario WHERE id = $1', [req.params.id]);
+  if (item) await emitirFicha(req, item.personagem_id);
   res.json({ ok: true });
 });
 
-// ---------- BROADCAST (mostrar imagem pra todos ou um player) ----------
-router.post('/broadcast', apenasMestre, upload.single('imagem'), (req, res) => {
-  const destino = req.body.destino || 'todos'; // 'todos' ou usuario_id
+// ---------- AVATAR ----------
+router.post('/personagens/:id/avatar', upload.single('avatar'), async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
+  const p = rows[0];
+  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
+  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
+    return res.status(403).json({ erro: 'Sem permissão' });
+  }
+  if (!req.file) return res.status(400).json({ erro: 'Envie uma imagem' });
+  const url = `/api/uploads/${req.file.filename}`;
+  await pool.query('UPDATE personagens SET foto_url = $1, atualizado_em = NOW() WHERE id = $2', [url, req.params.id]);
+  const atualizado = await personagemCompleto(req.params.id);
+  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
+  res.json(atualizado);
+});
+
+// ---------- INVOCAR A SOMBRA ----------
+router.post('/invocar-sombra', apenasMestre, (req, res) => {
+  const { usuario_id } = req.body;
+  if (!usuario_id) return res.status(400).json({ erro: 'Escolha um jogador' });
+  req.io.to(`usuario-${usuario_id}`).emit('invocar-sombra');
+  res.json({ ok: true });
+});
+
+// ---------- BROADCAST (imagem/gif/vídeo) ----------
+router.post('/broadcast', apenasMestre, upload.single('imagem'), async (req, res) => {
+  const destino = req.body.destino || 'todos';
   let url;
   if (req.file) {
     url = `/api/uploads/${req.file.filename}`;
@@ -187,7 +232,7 @@ router.post('/broadcast', apenasMestre, upload.single('imagem'), (req, res) => {
   } else {
     return res.status(400).json({ erro: 'Envie uma imagem ou uma url' });
   }
-  db.prepare('INSERT INTO broadcasts (url, destino) VALUES (?, ?)').run(url, destino);
+  await pool.query('INSERT INTO broadcasts (url, destino) VALUES ($1, $2)', [url, destino]);
   if (destino === 'todos') {
     req.io.emit('mostrar-imagem', { url });
   } else {
@@ -203,43 +248,22 @@ router.post('/broadcast/limpar', apenasMestre, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- AVATAR ----------
-router.post('/personagens/:id/avatar', upload.single('avatar'), (req, res) => {
-  const p = db.prepare('SELECT * FROM personagens WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
-  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
-    return res.status(403).json({ erro: 'Sem permissão' });
-  }
-  if (!req.file) return res.status(400).json({ erro: 'Envie uma imagem' });
-  const url = `/api/uploads/${req.file.filename}`;
-  db.prepare('UPDATE personagens SET foto_url = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?').run(url, req.params.id);
-  const atualizado = personagemCompleto(req.params.id);
-  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
-  res.json(atualizado);
-});
-
-// ---------- INVOCAR A SOMBRA (mestre manda um "acordo sombrio" pra um player específico) ----------
-router.post('/invocar-sombra', apenasMestre, (req, res) => {
-  const { usuario_id } = req.body;
-  if (!usuario_id) return res.status(400).json({ erro: 'Escolha um jogador' });
-  req.io.to(`usuario-${usuario_id}`).emit('invocar-sombra');
-  res.json({ ok: true });
-});
-
 // ---------- TROCA DE SENHA ----------
-router.put('/minha-senha', (req, res) => {
+router.put('/minha-senha', async (req, res) => {
   const { senha_atual, senha_nova } = req.body;
   if (!senha_atual || !senha_nova) return res.status(400).json({ erro: 'Preencha a senha atual e a nova' });
-  const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.usuario.id);
+  const { rows } = await pool.query('SELECT * FROM usuarios WHERE id = $1', [req.usuario.id]);
+  const usuario = rows[0];
   if (!bcrypt.compareSync(senha_atual, usuario.senha_hash)) return res.status(401).json({ erro: 'Senha atual incorreta' });
   const hash = bcrypt.hashSync(senha_nova, 10);
-  db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hash, req.usuario.id);
+  await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE id = $2', [hash, req.usuario.id]);
   res.json({ ok: true });
 });
 
 // ---------- IMPORTAR FICHA DE PDF PREENCHIDO ----------
 router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async (req, res) => {
-  const p = db.prepare('SELECT * FROM personagens WHERE id = ?').get(req.params.id);
+  const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
+  const p = rows[0];
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
   if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
     return res.status(403).json({ erro: 'Sem permissão' });
@@ -277,8 +301,7 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
       }
     }
 
-    const atributosAtuais = JSON.parse(p.atributos || '{}');
-    const atributos = { ...atributosAtuais };
+    const atributos = { ...(p.atributos || {}) };
     for (const [campoPdf, chave] of Object.entries(fieldMap.atributos)) {
       const n = lerNumero(campoPdf);
       if (n !== null) atributos[chave] = n;
@@ -286,8 +309,7 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
     atualizacoes.atributos = atributos;
 
     const prof = atualizacoes.bonus_proficiencia ?? p.bonus_proficiencia ?? 2;
-    const protecoesAtuais = JSON.parse(p.protecoes || '{}');
-    const protecoes = { ...protecoesAtuais };
+    const protecoes = { ...(p.protecoes || {}) };
     for (const [campoPdf, chave] of Object.entries(fieldMap.protecoes)) {
       const protValor = lerNumero(campoPdf);
       if (protValor === null) continue;
@@ -323,17 +345,16 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
       'dados_vida_total','dados_vida_usados','bonus_proficiencia','enfase_atual','enfase_total',
       'catarse_atual','catarse_total','atributos','protecoes','pericias'];
     const sets = []; const valores = [];
+    let i = 1;
     for (const campo of CAMPOS_VALIDOS) {
       if (campo in atualizacoes) {
-        let v = atualizacoes[campo];
-        if (typeof v === 'object') v = JSON.stringify(v);
-        sets.push(`${campo} = ?`);
-        valores.push(v);
+        sets.push(`${campo} = $${i++}`);
+        valores.push(atualizacoes[campo]);
       }
     }
     if (sets.length) {
       valores.push(req.params.id);
-      db.prepare(`UPDATE personagens SET ${sets.join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`).run(...valores);
+      await pool.query(`UPDATE personagens SET ${sets.join(', ')}, atualizado_em = NOW() WHERE id = $${i}`, valores);
     }
 
     let itensImportados = 0;
@@ -344,14 +365,17 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
       const volume = lerNumero(slot.volume) || 0;
       const fragmentos = lerNumero(slot.fragmentos) || 0;
       const descricao = lerTexto(slot.descricao);
-      db.prepare(`INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
-        VALUES (?,?,?,?,?,?,?)`).run(req.params.id, nome, descritores, volume, fragmentos, 1, descricao);
+      await pool.query(
+        `INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [req.params.id, nome, descritores, volume, fragmentos, 1, descricao]
+      );
       itensImportados++;
     }
 
     let habilidadesImportadas = 0;
-    const maxOrdemRow = db.prepare('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = ?').get(req.params.id);
-    let ordemAtual = maxOrdemRow.m + 1;
+    const maxOrdemRes = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = $1', [req.params.id]);
+    let ordemAtual = maxOrdemRes.rows[0].m + 1;
     for (const grupo of fieldMap.gruposHabilidade) {
       const nome = lerTexto(grupo.campoNome);
       if (!nome) continue;
@@ -376,16 +400,16 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
           descricao: valoresExtras[1] || null,
         };
       }
-      db.prepare(`INSERT INTO talentos (personagem_id, nome, tipo, trilha, execucao, custo, alcance, alvo, duracao, ataque, descritores, acerto, erro, efeito, especial, descricao, camada, ordem)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-        req.params.id, nome, dados.tipo, null, 'Ação', null,
-        dados.alcance, null, null, null, dados.descritores,
-        null, null, dados.efeito, dados.especial, dados.descricao, null, ordemAtual++
+      await pool.query(
+        `INSERT INTO talentos (personagem_id, nome, tipo, trilha, execucao, custo, alcance, alvo, duracao, ataque, descritores, acerto, erro, efeito, especial, descricao, camada, ordem)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        [req.params.id, nome, dados.tipo, null, 'Ação', null, dados.alcance, null, null, null,
+          dados.descritores, null, null, dados.efeito, dados.especial, dados.descricao, null, ordemAtual++]
       );
       habilidadesImportadas++;
     }
 
-    const atualizado = personagemCompleto(req.params.id);
+    const atualizado = await personagemCompleto(req.params.id);
     req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
     res.json({ ok: true, itensImportados, habilidadesImportadas, ficha: atualizado });
   } catch (err) {
@@ -395,15 +419,15 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
 });
 
 // ---------- EXPORTAR FICHA EM PDF ----------
-router.get('/personagens/:id/pdf', (req, res) => {
-  const p = personagemCompleto(req.params.id);
+router.get('/personagens/:id/pdf', async (req, res) => {
+  const p = await personagemCompleto(req.params.id);
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
   if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
     return res.status(403).json({ erro: 'Sem permissão' });
   }
 
-  const PDFDocument = require('pdfkit');
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const PDFDocumentKit = require('pdfkit');
+  const doc = new PDFDocumentKit({ margin: 40, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${(p.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
   doc.pipe(res);
@@ -477,3 +501,4 @@ router.get('/personagens/:id/pdf', (req, res) => {
 });
 
 module.exports = router;
+module.exports.personagemCompleto = personagemCompleto;

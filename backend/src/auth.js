@@ -1,12 +1,13 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const db = require('./db');
+const { pool } = require('./db');
 
 const SECRET = process.env.JWT_SECRET || 'skyfall-dev-secret-troque-em-producao';
 
-function login(req, res) {
+async function login(req, res) {
   const { login, senha } = req.body;
-  const usuario = db.prepare('SELECT * FROM usuarios WHERE login = ?').get(login);
+  const { rows } = await pool.query('SELECT * FROM usuarios WHERE login = $1', [login]);
+  const usuario = rows[0];
   if (!usuario || !bcrypt.compareSync(senha, usuario.senha_hash)) {
     return res.status(401).json({ erro: 'Login ou senha inválidos' });
   }

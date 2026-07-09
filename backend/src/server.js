@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 
 const { login, SECRET } = require('./auth');
 const routes = require('./routes');
-const db = require('./db');
+const { pool, pronto } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,19 +16,16 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(cors());
 app.use(express.json());
 
-// injeta io em toda requisição pra rotas poderem emitir eventos
 app.use((req, res, next) => { req.io = io; next(); });
 
 app.post('/api/login', login);
 app.use('/api', routes);
 
-// Tratamento de erros (ex: multer - arquivo grande demais, tipo inválido, etc.)
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(400).json({ erro: err.message || 'Erro ao processar a requisição' });
 });
 
-// Socket.io: cada cliente entra em salas conforme usuário/personagem
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth.token;
@@ -45,12 +42,10 @@ io.on('connection', (socket) => {
   socket.join(`usuario-${socket.usuario.id}`);
   socket.on('entrar-ficha', (personagemId) => socket.join(`personagem-${personagemId}`));
 
-  // ---- rolagem de dados (visível pra mesa toda) ----
   socket.on('rolar-dado', (dados) => {
     io.emit('dado-rolado', { ...dados, jogador: socket.usuario.nome, quando: Date.now() });
   });
 
-  // ---- jogo do Maxuel ----
   socket.on('soltar-gato', ({ enfaseValor }) => {
     if (socket.usuario.papel !== 'mestre') return;
     gatoAtivo = {
@@ -62,19 +57,32 @@ io.on('connection', (socket) => {
     io.emit('gato-solto', gatoAtivo);
   });
 
-  socket.on('gato-encontrado', ({ id }) => {
+  socket.on('gato-encontrado', async ({ id }) => {
     if (!gatoAtivo || gatoAtivo.id !== id) return;
     const catarseValor = gatoAtivo.enfaseValor;
     gatoAtivo = null;
-    const personagem = db.prepare('SELECT * FROM personagens WHERE usuario_id = ?').get(socket.usuario.id);
-    if (personagem) {
-      db.prepare('UPDATE personagens SET catarse_atual = catarse_atual + ? WHERE id = ?').run(catarseValor, personagem.id);
-      const atualizado = db.prepare('SELECT * FROM personagens WHERE id = ?').get(personagem.id);
-      io.to(`personagem-${personagem.id}`).emit('ficha-atualizada-parcial', { catarse_atual: atualizado.catarse_atual });
+    try {
+      const { rows } = await pool.query('SELECT * FROM personagens WHERE usuario_id = $1', [socket.usuario.id]);
+      const personagem = rows[0];
+      if (personagem) {
+        const atualizado = await pool.query(
+          'UPDATE personagens SET catarse_atual = catarse_atual + $1 WHERE id = $2 RETURNING catarse_atual',
+          [catarseValor, personagem.id]
+        );
+        io.to(`personagem-${personagem.id}`).emit('ficha-atualizada-parcial', { catarse_atual: atualizado.rows[0].catarse_atual });
+      }
+    } catch (err) {
+      console.error('Erro ao creditar catarse do Maxuel:', err);
     }
     io.emit('gato-capturado', { vencedor: socket.usuario.nome, enfaseValor: catarseValor });
   });
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Servidor Skyfall rodando na porta ${PORT}`));
+
+pronto.then(() => {
+  server.listen(PORT, () => console.log(`Servidor Skyfall rodando na porta ${PORT}`));
+}).catch((err) => {
+  console.error('Não foi possível iniciar o servidor (erro no banco de dados):', err);
+  process.exit(1);
+});
