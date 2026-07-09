@@ -25,6 +25,18 @@ skyfall-app/
 > (não perde nada, só precisa entrar no painel do Supabase e clicar em "reativar"
 > antes de usar de novo). É bem diferente de perder os dados — é só uma pausa.
 
+## Armazenamento de imagens (avatares e imagens transmitidas)
+
+Usa o mesmo projeto do Supabase acima, pelo recurso de Storage (arquivos), que também
+é gratuito e não depende do disco do Render (que é temporário).
+
+1. No painel do Supabase, vá em **Project Settings → API**
+2. Copie a **Project URL** → cole em `SUPABASE_URL` no `.env`
+3. Copie a **service_role key** (não é a `anon` key — precisa ser a `service_role`,
+   que tem permissão de criar arquivos) → cole em `SUPABASE_SERVICE_KEY` no `.env`
+4. Não precisa criar o bucket manualmente — o servidor cria sozinho na primeira vez
+   que rodar (`bucket "uploads"` público)
+
 ## Rodando localmente (pra testar)
 
 Abra dois terminais.
@@ -74,11 +86,9 @@ Você vai criar **dois serviços** no Render: um pro backend (API) e um pro fron
 Antes de tudo, seu código precisa estar num repositório do GitHub, e você precisa já
 ter criado o banco no Supabase (seção acima) com a `DATABASE_URL` em mãos.
 
-> ℹ️ Como o banco agora fica no Supabase (fora do Render), as fichas não somem mais
-> quando o backend reinicia ou "dorme" — só a **pasta de uploads** (avatares e imagens
-> transmitidas pelo mestre) ainda é temporária no plano free do Render, já que fica
-> salva localmente no servidor. Fichas e dados ficam seguros; só uma imagem ou outra
-> enviada pode precisar ser reenviada depois de um tempo parado.
+> ℹ️ Com o banco no Supabase e as imagens também no Supabase Storage, nada mais
+> depende do disco do Render — fichas, avatares e imagens transmitidas ficam seguros
+> mesmo quando o backend reinicia ou "dorme" por inatividade.
 
 ### 1. Backend (API)
 
@@ -94,6 +104,8 @@ ter criado o banco no Supabase (seção acima) com a `DATABASE_URL` em mãos.
 5. Antes de criar, adicione as **Environment Variables**:
    - **Key:** `DATABASE_URL` → **Value:** a connection string do Supabase
    - **Key:** `JWT_SECRET` → **Value:** qualquer texto aleatório grande (ex: gere um em [randomkeygen.com](https://randomkeygen.com))
+   - **Key:** `SUPABASE_URL` → **Value:** a Project URL do Supabase
+   - **Key:** `SUPABASE_SERVICE_KEY` → **Value:** a service_role key do Supabase
 6. Clique em **Create Web Service** e espere o deploy terminar
 7. Copie a URL que o Render gerou (algo como `https://manus-milles-api.onrender.com`)
 

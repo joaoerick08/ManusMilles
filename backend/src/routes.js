@@ -7,21 +7,13 @@ const { pool } = require('./db');
 const { autenticar, apenasMestre } = require('./auth');
 const { PDFDocument } = require('pdf-lib');
 const fieldMap = require('./pdfFieldMap.json');
+const { enviarArquivo } = require('./storage');
 
 const router = express.Router();
 
-const uploadDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'))
-  }),
-  limits: { fileSize: 200 * 1024 * 1024 }
-});
-const uploadMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const uploadMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+const uploadPdfMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-router.use('/uploads', express.static(uploadDir));
 router.use(autenticar);
 
 // ---------- USUÁRIOS (players) ----------
@@ -198,7 +190,7 @@ router.delete('/inventario/:id', async (req, res) => {
 });
 
 // ---------- AVATAR ----------
-router.post('/personagens/:id/avatar', upload.single('avatar'), async (req, res) => {
+router.post('/personagens/:id/avatar', uploadMemoria.single('avatar'), async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
   const p = rows[0];
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
@@ -206,7 +198,13 @@ router.post('/personagens/:id/avatar', upload.single('avatar'), async (req, res)
     return res.status(403).json({ erro: 'Sem permissão' });
   }
   if (!req.file) return res.status(400).json({ erro: 'Envie uma imagem' });
-  const url = `/api/uploads/${req.file.filename}`;
+  let url;
+  try {
+    url = await enviarArquivo(req.file.buffer, req.file.originalname, req.file.mimetype);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ erro: 'Não foi possível enviar a imagem pro armazenamento.' });
+  }
   await pool.query('UPDATE personagens SET foto_url = $1, atualizado_em = NOW() WHERE id = $2', [url, req.params.id]);
   const atualizado = await personagemCompleto(req.params.id);
   req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
@@ -222,11 +220,16 @@ router.post('/invocar-sombra', apenasMestre, (req, res) => {
 });
 
 // ---------- BROADCAST (imagem/gif/vídeo) ----------
-router.post('/broadcast', apenasMestre, upload.single('imagem'), async (req, res) => {
+router.post('/broadcast', apenasMestre, uploadMemoria.single('imagem'), async (req, res) => {
   const destino = req.body.destino || 'todos';
   let url;
   if (req.file) {
-    url = `/api/uploads/${req.file.filename}`;
+    try {
+      url = await enviarArquivo(req.file.buffer, req.file.originalname, req.file.mimetype);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ erro: 'Não foi possível enviar o arquivo pro armazenamento.' });
+    }
   } else if (req.body.url) {
     url = req.body.url;
   } else {
@@ -261,7 +264,7 @@ router.put('/minha-senha', async (req, res) => {
 });
 
 // ---------- IMPORTAR FICHA DE PDF PREENCHIDO ----------
-router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async (req, res) => {
+router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
   const p = rows[0];
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
@@ -418,87 +421,6 @@ router.post('/personagens/:id/importar-pdf', uploadMemoria.single('pdf'), async 
   }
 });
 
-// ---------- EXPORTAR FICHA EM PDF ----------
-router.get('/personagens/:id/pdf', async (req, res) => {
-  const p = await personagemCompleto(req.params.id);
-  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
-  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
-    return res.status(403).json({ erro: 'Sem permissão' });
-  }
-
-  const PDFDocumentKit = require('pdfkit');
-  const doc = new PDFDocumentKit({ margin: 40, size: 'A4' });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${(p.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
-  doc.pipe(res);
-
-  const cor = '#5a2a63';
-  doc.fontSize(22).fillColor(cor).text(p.nome || 'Personagem', { align: 'left' });
-  doc.fontSize(11).fillColor('#333')
-    .text(`Nível ${p.nivel || 0}  ·  Legado: ${p.legado || '-'}  ·  Herança: ${p.heranca || '-'}`);
-  doc.text(`Antecedente: ${p.antecedente || '-'}   Maldição: ${p.maldicao || '-'}`);
-  doc.moveDown();
-
-  doc.fontSize(14).fillColor(cor).text('Atributos e Proteções');
-  doc.fontSize(10).fillColor('#333');
-  const bonus = p.bonus_proficiencia ?? 2;
-  const nomesAtr = { forca: 'Força', destreza: 'Destreza', constituicao: 'Constituição', inteligencia: 'Inteligência', sabedoria: 'Sabedoria', carisma: 'Carisma' };
-  for (const chave of Object.keys(nomesAtr)) {
-    const valor = p.atributos?.[chave] ?? 0;
-    const treinado = !!p.protecoes?.[chave];
-    const protecao = 10 + valor + (treinado ? bonus : 0);
-    doc.text(`${nomesAtr[chave]}: ${valor}   |   Proteção: ${protecao}${treinado ? ' (treinado)' : ''}`);
-  }
-  doc.moveDown();
-
-  doc.fontSize(14).fillColor(cor).text('Pontos de Vida e Recursos');
-  doc.fontSize(10).fillColor('#333');
-  doc.text(`PV: ${p.pv_atual}/${p.pv_max} (temp: ${p.pv_temp || 0})   Dados de vida: ${p.dados_vida_usados}/${p.dados_vida_total}`);
-  doc.text(`Catarse: ${p.catarse_atual}/${p.catarse_total}   Ênfase: ${p.enfase_atual}/${p.enfase_total}`);
-  doc.text(`Deslocamento: ${p.deslocamento || '-'}   Redução de dano: ${p.reducao_dano || 0}   Iniciativa: ${p.iniciativa_bonus || 0}`);
-  doc.moveDown();
-
-  if (p.pericias?.length) {
-    doc.fontSize(14).fillColor(cor).text('Perícias');
-    doc.fontSize(10).fillColor('#333');
-    p.pericias.forEach(per => doc.text(`${per.nome || '-'}: ${per.total ?? 0}${per.proficiente ? ' (treinado)' : ''}`));
-    doc.moveDown();
-  }
-
-  if (p.ataques?.length) {
-    doc.fontSize(14).fillColor(cor).text('Ataques');
-    doc.fontSize(10).fillColor('#333');
-    p.ataques.forEach(a => doc.text(`${a.nome || '-'} · Teste: ${a.teste || '-'} · Dano: ${a.dano || '-'} · Crítico: ${a.critico || '-'} · Tipo: ${a.tipo || '-'}`));
-    doc.moveDown();
-  }
-
-  if (p.talentos?.length) {
-    doc.fontSize(14).fillColor(cor).text('Talentos, Habilidades e Magias');
-    p.talentos.forEach(t => {
-      doc.moveDown(0.3);
-      doc.fontSize(11).fillColor(cor).text(`${t.nome}${t.custo ? '  (' + t.custo + ')' : ''}`);
-      doc.fontSize(9).fillColor('#333');
-      const linha1 = [t.trilha, t.tipo, t.execucao].filter(Boolean).join(' · ');
-      if (linha1) doc.text(linha1);
-      const linha2 = [t.alcance && `Alcance: ${t.alcance}`, t.alvo && `Alvo: ${t.alvo}`, t.duracao && `Duração: ${t.duracao}`].filter(Boolean).join('   ');
-      if (linha2) doc.text(linha2);
-      if (t.acerto) doc.text(`Acerto: ${t.acerto}`);
-      if (t.erro) doc.text(`Erro: ${t.erro}`);
-      if (t.efeito) doc.text(`Efeito: ${t.efeito}`);
-      if (t.especial) doc.text(`Especial: ${t.especial}`);
-      if (t.descricao) doc.text(t.descricao, { oblique: true });
-    });
-    doc.moveDown();
-  }
-
-  if (p.inventario?.length) {
-    doc.fontSize(14).fillColor(cor).text('Inventário');
-    doc.fontSize(10).fillColor('#333');
-    p.inventario.forEach(i => doc.text(`${i.nome}${i.quantidade > 1 ? ` x${i.quantidade}` : ''} · Volume: ${i.volume || 0} ${i.descritores ? '· ' + i.descritores : ''}`));
-  }
-
-  doc.end();
-});
 
 module.exports = router;
 module.exports.personagemCompleto = personagemCompleto;

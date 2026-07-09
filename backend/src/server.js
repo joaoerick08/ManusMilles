@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const { login, SECRET } = require('./auth');
 const routes = require('./routes');
 const { pool, pronto } = require('./db');
+const { garantirBucket } = require('./storage');
 
 const app = express();
 const server = http.createServer(app);
@@ -80,7 +81,8 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
-pronto.then(() => {
+pronto.then(async () => {
+  try { await garantirBucket(); } catch (err) { console.error('Erro ao verificar/criar bucket de uploads:', err.message); }
   server.listen(PORT, () => console.log(`Servidor Skyfall rodando na porta ${PORT}`));
 }).catch((err) => {
   console.error('Não foi possível iniciar o servidor (erro no banco de dados):', err);

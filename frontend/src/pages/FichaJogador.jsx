@@ -40,21 +40,11 @@ export default function FichaJogador({ personagemId }) {
     }, 500);
   }
 
-  async function exportarPdf() {
-    const resp = await api.get(`/personagens/${personagemId}/pdf`, { responseType: 'blob' });
-    const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(ficha.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   if (!ficha) return <div className="p-8 text-center" style={{ color: 'var(--text-dim)' }}>Carregando ficha...</div>;
 
   return (
     <div className="max-w-2xl mx-auto pb-24">
-      <Cabecalho ficha={ficha} atualizarLocal={atualizarLocal} personagemId={personagemId} setFicha={setFicha} exportarPdf={exportarPdf} />
+      <Cabecalho ficha={ficha} atualizarLocal={atualizarLocal} personagemId={personagemId} setFicha={setFicha} />
 
       <div className="flex gap-1 px-4 mt-4 sticky top-0 z-10 py-2" style={{ background: 'var(--bg)' }}>
         {[['ficha', 'Ficha'], ['talentos', 'Habilidades'], ['magias', 'Magias'], ['inventario', 'Inventário']].map(([id, label]) => (
@@ -84,7 +74,7 @@ export default function FichaJogador({ personagemId }) {
   );
 }
 
-function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha, exportarPdf }) {
+function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
   const inputRef = useRef(null);
   const inputPdfRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
@@ -160,10 +150,6 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha, exportarPdf 
               className="w-full px-2 py-1 rounded text-xs font-medium outline-none"
               style={{ background: 'var(--surface-2)', border: '1px solid var(--shadow)', color: '#c9a8ec' }} />
           </div>
-          <button onClick={exportarPdf} title="Exportar PDF"
-            className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            📄 PDF
-          </button>
           <button onClick={() => inputPdfRef.current?.click()} title="Importar ficha de um PDF preenchido"
             className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--gold)', color: 'var(--gold)' }}>
             {importando ? '...' : '📥 Importar'}
