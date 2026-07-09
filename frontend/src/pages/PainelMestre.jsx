@@ -161,7 +161,7 @@ function PainelTransmitir({ usuarios }) {
       <div className="pt-3 mt-3 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
         <label className="text-xs block mb-1" style={{ color: 'var(--gold)' }}>🐈 Soltar o Maxuel</label>
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>Ênfase</span>
+          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>Catarse</span>
           <input type="number" min="1" value={enfaseMaxuel} onChange={e => setEnfaseMaxuel(Math.max(1, Number(e.target.value)))}
             className="w-14 text-center py-1 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
           <button onClick={soltarMaxuel} className="flex-1 py-1.5 rounded text-sm font-medium" style={{ background: 'var(--gold)', color: '#120810' }}>
@@ -169,7 +169,7 @@ function PainelTransmitir({ usuarios }) {
           </button>
         </div>
         <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-          Ele aparece pequeno em um lugar aleatório da tela. Quem clicar primeiro ganha a ênfase.
+          Ele aparece pequeno em um lugar aleatório da tela. Quem clicar primeiro ganha a Catarse.
         </p>
       </div>
     </div>

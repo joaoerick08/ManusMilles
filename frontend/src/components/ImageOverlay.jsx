@@ -18,7 +18,7 @@ export default function ImageOverlay() {
 
   if (!url) return null;
 
-  const ehVideo = /\.(mp4|webm|mov|ogg)$/i.test(url);
+  const ehVideo = /\.(mp4|webm|mov|ogg|m4v|avi|mkv|3gp)$/i.test(url);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"

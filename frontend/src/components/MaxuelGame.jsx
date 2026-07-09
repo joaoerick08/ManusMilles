@@ -10,7 +10,7 @@ export default function MaxuelGame() {
     const aoSoltar = (g) => setGato(g);
     const aoCapturar = ({ vencedor, enfaseValor }) => {
       setGato(null);
-      setToast(`O Maxuel foi encontrado por ${vencedor}! (+${enfaseValor} Ênfase)`);
+      setToast(`O Maxuel foi encontrado por ${vencedor}! (+${enfaseValor} Catarse)`);
       setTimeout(() => setToast(null), 4000);
     };
     socket.on('gato-solto', aoSoltar);

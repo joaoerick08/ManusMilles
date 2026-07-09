@@ -113,6 +113,11 @@ router.put('/personagens/:id', (req, res) => {
 // ---------- TALENTOS (habilidades/magias) ----------
 const CAMPOS_TALENTO = ['nome','trilha','tipo','execucao','custo','alcance','alvo','duracao','ataque','descritores','acerto','erro','efeito','especial','descricao','camada','ordem'];
 
+function emitirFicha(req, personagemId) {
+  const atualizado = personagemCompleto(personagemId);
+  if (atualizado) req.io.to(`personagem-${personagemId}`).emit('ficha-atualizada', atualizado);
+}
+
 router.post('/personagens/:id/talentos', (req, res) => {
   if (!('ordem' in req.body)) {
     const max = db.prepare('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = ?').get(req.params.id);
@@ -121,18 +126,23 @@ router.post('/personagens/:id/talentos', (req, res) => {
   const valores = CAMPOS_TALENTO.map(c => req.body[c] ?? null);
   const info = db.prepare(`INSERT INTO talentos (personagem_id, ${CAMPOS_TALENTO.join(', ')})
     VALUES (?, ${CAMPOS_TALENTO.map(() => '?').join(', ')})`).run(req.params.id, ...valores);
+  emitirFicha(req, req.params.id);
   res.json({ id: info.lastInsertRowid });
 });
 
 router.put('/talentos/:id', (req, res) => {
+  const talento = db.prepare('SELECT personagem_id FROM talentos WHERE id = ?').get(req.params.id);
   const sets = []; const valores = [];
   for (const c of CAMPOS_TALENTO) if (c in req.body) { sets.push(`${c} = ?`); valores.push(req.body[c]); }
   if (sets.length) { valores.push(req.params.id); db.prepare(`UPDATE talentos SET ${sets.join(', ')} WHERE id = ?`).run(...valores); }
+  if (talento) emitirFicha(req, talento.personagem_id);
   res.json({ ok: true });
 });
 
 router.delete('/talentos/:id', (req, res) => {
+  const talento = db.prepare('SELECT personagem_id FROM talentos WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM talentos WHERE id = ?').run(req.params.id);
+  if (talento) emitirFicha(req, talento.personagem_id);
   res.json({ ok: true });
 });
 
@@ -141,19 +151,24 @@ router.post('/personagens/:id/inventario', (req, res) => {
   const { nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes } = req.body;
   const info = db.prepare(`INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
     VALUES (?,?,?,?,?,?,?)`).run(req.params.id, nome, descritores, volume || 0, fragmentos_arcanos || 0, quantidade || 1, observacoes);
+  emitirFicha(req, req.params.id);
   res.json({ id: info.lastInsertRowid });
 });
 
 router.put('/inventario/:id', (req, res) => {
+  const item = db.prepare('SELECT personagem_id FROM inventario WHERE id = ?').get(req.params.id);
   const campos = ['nome','descritores','volume','fragmentos_arcanos','quantidade','observacoes'];
   const sets = []; const valores = [];
   for (const c of campos) if (c in req.body) { sets.push(`${c} = ?`); valores.push(req.body[c]); }
   if (sets.length) { valores.push(req.params.id); db.prepare(`UPDATE inventario SET ${sets.join(', ')} WHERE id = ?`).run(...valores); }
+  if (item) emitirFicha(req, item.personagem_id);
   res.json({ ok: true });
 });
 
 router.delete('/inventario/:id', (req, res) => {
+  const item = db.prepare('SELECT personagem_id FROM inventario WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM inventario WHERE id = ?').run(req.params.id);
+  if (item) emitirFicha(req, item.personagem_id);
   res.json({ ok: true });
 });
 

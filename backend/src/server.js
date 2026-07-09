@@ -64,15 +64,15 @@ io.on('connection', (socket) => {
 
   socket.on('gato-encontrado', ({ id }) => {
     if (!gatoAtivo || gatoAtivo.id !== id) return;
-    const enfaseValor = gatoAtivo.enfaseValor;
+    const catarseValor = gatoAtivo.enfaseValor;
     gatoAtivo = null;
     const personagem = db.prepare('SELECT * FROM personagens WHERE usuario_id = ?').get(socket.usuario.id);
     if (personagem) {
-      db.prepare('UPDATE personagens SET enfase_atual = enfase_atual + ? WHERE id = ?').run(enfaseValor, personagem.id);
+      db.prepare('UPDATE personagens SET catarse_atual = catarse_atual + ? WHERE id = ?').run(catarseValor, personagem.id);
       const atualizado = db.prepare('SELECT * FROM personagens WHERE id = ?').get(personagem.id);
-      io.to(`personagem-${personagem.id}`).emit('ficha-atualizada-parcial', { enfase_atual: atualizado.enfase_atual });
+      io.to(`personagem-${personagem.id}`).emit('ficha-atualizada-parcial', { catarse_atual: atualizado.catarse_atual });
     }
-    io.emit('gato-capturado', { vencedor: socket.usuario.nome, enfaseValor });
+    io.emit('gato-capturado', { vencedor: socket.usuario.nome, enfaseValor: catarseValor });
   });
 });
 
