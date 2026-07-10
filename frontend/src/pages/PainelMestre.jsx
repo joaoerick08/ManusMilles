@@ -97,7 +97,11 @@ function PainelMapas() {
       setNome(''); setArquivo(null); setMsg('Mapa adicionado!');
       carregar();
     } catch (err) {
-      setMsg(err.response?.data?.erro || 'Erro ao enviar o mapa');
+      const detalhe = err.response
+        ? `Erro ${err.response.status}: ${typeof err.response.data === 'object' ? JSON.stringify(err.response.data) : 'resposta inesperada do servidor'}`
+        : `Sem resposta do servidor (${err.message}).`;
+      setMsg(detalhe);
+      console.error('Falha ao enviar mapa:', err);
     } finally {
       setEnviando(false);
     }
