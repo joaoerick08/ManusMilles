@@ -47,13 +47,26 @@ export default function MapaInterativo() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    await api.post(`/mapas/${mapa.id}/pins`, { x, y });
+    const { data: pinSalvo } = await api.post(`/mapas/${mapa.id}/pins`, { x, y });
+    // atualização otimista: garante que o próprio pin apareça na hora, sem depender do socket
+    setMapa((m) => {
+      if (!m || m.id !== pinSalvo.mapa_id) return m;
+      const outros = m.pins.filter(p => p.usuario_id !== pinSalvo.usuario_id);
+      return { ...m, pins: [...outros, pinSalvo] };
+    });
   }
 
   async function removerMeuPin() {
     if (!mapa) return;
     await api.delete(`/mapas/${mapa.id}/pins/mine`);
+    setMapa((m) => m ? { ...m, pins: m.pins.filter(p => p.usuario_id !== usuario.id) } : m);
   }
+
+  // reforço: busca o estado mais recente periodicamente, além do tempo real via socket
+  useEffect(() => {
+    const intervalo = setInterval(() => { carregar(); }, 6000);
+    return () => clearInterval(intervalo);
+  }, [carregar]);
 
   if (carregando) return <div className="p-8 text-center" style={{ color: 'var(--text-dim)' }}>Carregando mapa...</div>;
   if (!mapa) return <div className="p-8 text-center" style={{ color: 'var(--text-dim)' }}>Nenhum mapa ativo ainda. Peça pro mestre subir um.</div>;
