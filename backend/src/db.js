@@ -104,6 +104,26 @@ async function iniciar() {
       destino TEXT NOT NULL,
       criado_em TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS mapas (
+      id SERIAL PRIMARY KEY,
+      nome TEXT NOT NULL,
+      url TEXT NOT NULL,
+      ativo BOOLEAN DEFAULT false,
+      criado_em TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS mapa_pins (
+      id SERIAL PRIMARY KEY,
+      mapa_id INTEGER NOT NULL REFERENCES mapas(id) ON DELETE CASCADE,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      nome_jogador TEXT NOT NULL,
+      cor TEXT NOT NULL,
+      x REAL NOT NULL,
+      y REAL NOT NULL,
+      atualizado_em TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(mapa_id, usuario_id)
+    );
   `);
 
   const { rows } = await pool.query("SELECT id FROM usuarios WHERE papel = 'mestre' LIMIT 1");

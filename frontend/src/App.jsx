@@ -3,6 +3,7 @@ import { getUsuario, sair, api } from './api';
 import Login from './pages/Login';
 import FichaJogador from './pages/FichaJogador';
 import PainelMestre from './pages/PainelMestre';
+import MapaInterativo from './pages/MapaInterativo';
 import ImageOverlay from './components/ImageOverlay';
 import ShadowOverlay from './components/ShadowOverlay';
 import TrocarSenha from './components/TrocarSenha';
@@ -13,6 +14,7 @@ export default function App() {
   const [usuario, setUsuario] = useState(getUsuario());
   const [meuPersonagem, setMeuPersonagem] = useState(null);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const [viewPlayer, setViewPlayer] = useState('ficha');
 
   useEffect(() => {
     if (usuario && usuario.papel === 'player') {
@@ -27,6 +29,18 @@ export default function App() {
       <header className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
         <span className="display text-lg" style={{ color: 'var(--gold)' }}>Manus Milles</span>
         <div className="flex items-center gap-3">
+          {usuario.papel === 'player' && (
+            <div className="flex gap-1">
+              <button onClick={() => setViewPlayer('ficha')} className="text-xs px-2 py-1 rounded"
+                style={viewPlayer === 'ficha' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                Ficha
+              </button>
+              <button onClick={() => setViewPlayer('mapa')} className="text-xs px-2 py-1 rounded"
+                style={viewPlayer === 'mapa' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                Mapa
+              </button>
+            </div>
+          )}
           <span className="text-sm" style={{ color: 'var(--text-dim)' }}>{usuario.nome}</span>
           <button onClick={() => setTrocandoSenha(true)} className="text-xs px-2 py-1 rounded"
             style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
@@ -41,9 +55,11 @@ export default function App() {
 
       {usuario.papel === 'mestre'
         ? <PainelMestre />
-        : (meuPersonagem
-            ? <FichaJogador personagemId={meuPersonagem} />
-            : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
+        : viewPlayer === 'mapa'
+          ? <MapaInterativo />
+          : (meuPersonagem
+              ? <FichaJogador personagemId={meuPersonagem} />
+              : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
 
       <ImageOverlay />
       <ShadowOverlay />

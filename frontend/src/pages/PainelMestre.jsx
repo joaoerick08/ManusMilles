@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, conectarSocket } from '../api';
 import FichaJogador from './FichaJogador';
+import MapaInterativo from './MapaInterativo';
 
 export default function PainelMestre() {
   const [personagens, setPersonagens] = useState([]);
@@ -24,7 +25,7 @@ export default function PainelMestre() {
       <aside className="w-full md:w-64 flex-shrink-0 p-4" style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
         <h2 className="display text-lg mb-4" style={{ color: 'var(--gold)' }}>Mesa</h2>
 
-        <div className="flex gap-1 mb-4">
+        <div className="flex gap-1 mb-4 flex-wrap">
           <button onClick={() => setAbaLateral('fichas')} className="flex-1 py-1.5 rounded text-xs"
             style={abaLateral === 'fichas' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Fichas
@@ -36,6 +37,10 @@ export default function PainelMestre() {
           <button onClick={() => setAbaLateral('jogadores')} className="flex-1 py-1.5 rounded text-xs"
             style={abaLateral === 'jogadores' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Jogadores
+          </button>
+          <button onClick={() => setAbaLateral('mapa')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'mapa' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Mapa
           </button>
         </div>
 
@@ -53,13 +58,93 @@ export default function PainelMestre() {
 
         {abaLateral === 'transmitir' && <PainelTransmitir usuarios={usuarios} />}
         {abaLateral === 'jogadores' && <PainelJogadores usuarios={usuarios} recarregar={carregar} />}
+        {abaLateral === 'mapa' && <PainelMapas />}
       </aside>
 
       <main className="flex-1 py-4">
-        {selecionado
-          ? <FichaJogador personagemId={selecionado} />
-          : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>}
+        {abaLateral === 'mapa'
+          ? <MapaInterativo />
+          : (selecionado
+              ? <FichaJogador personagemId={selecionado} />
+              : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
       </main>
+    </div>
+  );
+}
+
+function PainelMapas() {
+  const [mapas, setMapas] = useState([]);
+  const [nome, setNome] = useState('');
+  const [arquivo, setArquivo] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  async function carregar() {
+    const { data } = await api.get('/mapas');
+    setMapas(data);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  async function enviar() {
+    if (!arquivo) { setMsg('Escolhe uma imagem primeiro'); return; }
+    setEnviando(true);
+    try {
+      const form = new FormData();
+      form.append('mapa', arquivo);
+      form.append('nome', nome || 'Mapa sem nome');
+      await api.post('/mapas', form);
+      setNome(''); setArquivo(null); setMsg('Mapa adicionado!');
+      carregar();
+    } catch (err) {
+      setMsg(err.response?.data?.erro || 'Erro ao enviar o mapa');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function ativar(id) {
+    await api.put(`/mapas/${id}/ativar`);
+    carregar();
+  }
+
+  async function excluir(id) {
+    if (!confirm('Excluir esse mapa?')) return;
+    await api.delete(`/mapas/${id}`);
+    carregar();
+  }
+
+  async function limparPins(id) {
+    await api.delete(`/mapas/${id}/pins`);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <input placeholder="Nome do mapa" value={nome} onChange={e => setNome(e.target.value)}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <input type="file" accept="image/*" onChange={e => setArquivo(e.target.files[0])} className="w-full text-xs" style={{ color: 'var(--text-dim)' }} />
+        <button onClick={enviar} disabled={enviando} className="w-full py-1.5 rounded text-sm" style={{ background: 'var(--gold)', color: '#120810' }}>
+          {enviando ? 'Enviando...' : '+ Adicionar mapa'}
+        </button>
+        {msg && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{msg}</p>}
+      </div>
+
+      <div className="space-y-2">
+        {mapas.map(m => (
+          <div key={m.id} className="p-2 rounded text-sm" style={{ background: m.ativo ? 'var(--surface-2)' : 'transparent', border: '1px solid var(--border)' }}>
+            <p className="font-medium" style={{ color: m.ativo ? 'var(--gold)' : 'var(--text)' }}>
+              {m.nome} {m.ativo && '· ativo'}
+            </p>
+            <div className="flex gap-2 mt-1">
+              {!m.ativo && <button onClick={() => ativar(m.id)} className="text-xs" style={{ color: 'var(--gold)' }}>usar este</button>}
+              {m.ativo && <button onClick={() => limparPins(m.id)} className="text-xs" style={{ color: 'var(--text-dim)' }}>limpar pins</button>}
+              <button onClick={() => excluir(m.id)} className="text-xs" style={{ color: 'var(--danger)' }}>excluir</button>
+            </div>
+          </div>
+        ))}
+        {mapas.length === 0 && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Nenhum mapa ainda.</p>}
+      </div>
     </div>
   );
 }

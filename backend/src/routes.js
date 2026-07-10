@@ -422,5 +422,73 @@ router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), asy
 });
 
 
+// ---------- MAPAS INTERATIVOS ----------
+const CORES_PIN = ['#e0554f', '#4f9de0', '#4fe08a', '#e0c94f', '#b04fe0', '#e08a4f', '#4fd8e0', '#e04f9e'];
+
+router.get('/mapas', async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM mapas ORDER BY criado_em DESC');
+  res.json(rows);
+});
+
+router.get('/mapas/ativo', async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM mapas WHERE ativo = true LIMIT 1');
+  if (!rows[0]) return res.json(null);
+  const pins = await pool.query('SELECT * FROM mapa_pins WHERE mapa_id = $1', [rows[0].id]);
+  res.json({ ...rows[0], pins: pins.rows });
+});
+
+router.post('/mapas', apenasMestre, uploadMemoria.single('mapa'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ erro: 'Envie uma imagem do mapa' });
+  const nome = req.body.nome || 'Mapa sem nome';
+  try {
+    const url = await enviarArquivo(req.file.buffer, req.file.originalname, req.file.mimetype);
+    const { rows } = await pool.query('INSERT INTO mapas (nome, url) VALUES ($1, $2) RETURNING *', [nome, url]);
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: err.message || 'Erro ao enviar o mapa' });
+  }
+});
+
+router.put('/mapas/:id/ativar', apenasMestre, async (req, res) => {
+  await pool.query('UPDATE mapas SET ativo = false');
+  const { rows } = await pool.query('UPDATE mapas SET ativo = true WHERE id = $1 RETURNING *', [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ erro: 'Mapa não encontrado' });
+  const pins = await pool.query('SELECT * FROM mapa_pins WHERE mapa_id = $1', [rows[0].id]);
+  const mapaCompleto = { ...rows[0], pins: pins.rows };
+  req.io.emit('mapa-trocado', mapaCompleto);
+  res.json(mapaCompleto);
+});
+
+router.delete('/mapas/:id', apenasMestre, async (req, res) => {
+  await pool.query('DELETE FROM mapas WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+router.post('/mapas/:id/pins', async (req, res) => {
+  const { x, y } = req.body;
+  const cor = CORES_PIN[req.usuario.id % CORES_PIN.length];
+  const { rows } = await pool.query(
+    `INSERT INTO mapa_pins (mapa_id, usuario_id, nome_jogador, cor, x, y)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (mapa_id, usuario_id) DO UPDATE SET x = $5, y = $6, atualizado_em = NOW()
+     RETURNING *`,
+    [req.params.id, req.usuario.id, req.usuario.nome, cor, x, y]
+  );
+  req.io.emit('mapa-pin-atualizado', rows[0]);
+  res.json(rows[0]);
+});
+
+router.delete('/mapas/:id/pins/mine', async (req, res) => {
+  await pool.query('DELETE FROM mapa_pins WHERE mapa_id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
+  req.io.emit('mapa-pin-removido', { mapa_id: Number(req.params.id), usuario_id: req.usuario.id });
+  res.json({ ok: true });
+});
+
+router.delete('/mapas/:id/pins', apenasMestre, async (req, res) => {
+  await pool.query('DELETE FROM mapa_pins WHERE mapa_id = $1', [req.params.id]);
+  req.io.emit('mapa-pins-limpos', { mapa_id: Number(req.params.id) });
+  res.json({ ok: true });
+});
+
 module.exports = router;
 module.exports.personagemCompleto = personagemCompleto;
