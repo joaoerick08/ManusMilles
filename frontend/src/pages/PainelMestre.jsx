@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, conectarSocket } from '../api';
 import FichaJogador from './FichaJogador';
 import MapaInterativo from './MapaInterativo';
+import PainelCombate from './PainelCombate';
+import UsuariosOnline from '../components/UsuariosOnline';
 
 export default function PainelMestre() {
   const [personagens, setPersonagens] = useState([]);
@@ -25,6 +27,10 @@ export default function PainelMestre() {
       <aside className="w-full md:w-64 flex-shrink-0 p-4" style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
         <h2 className="display text-lg mb-4" style={{ color: 'var(--gold)' }}>Mesa</h2>
 
+        <div className="mb-4 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <UsuariosOnline />
+        </div>
+
         <div className="flex gap-1 mb-4 flex-wrap">
           <button onClick={() => setAbaLateral('fichas')} className="flex-1 py-1.5 rounded text-xs"
             style={abaLateral === 'fichas' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
@@ -41,6 +47,10 @@ export default function PainelMestre() {
           <button onClick={() => setAbaLateral('mapa')} className="flex-1 py-1.5 rounded text-xs"
             style={abaLateral === 'mapa' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Mapa
+          </button>
+          <button onClick={() => setAbaLateral('combate')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'combate' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Combate
           </button>
         </div>
 
@@ -64,9 +74,11 @@ export default function PainelMestre() {
       <main className="flex-1 py-4">
         {abaLateral === 'mapa'
           ? <MapaInterativo />
-          : (selecionado
-              ? <FichaJogador personagemId={selecionado} />
-              : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
+          : abaLateral === 'combate'
+            ? <PainelCombate editavel={true} />
+            : (selecionado
+                ? <FichaJogador personagemId={selecionado} />
+                : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
       </main>
     </div>
   );

@@ -56,6 +56,10 @@ export default function Login({ aoLogar }) {
             {carregando ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
+
+        <p className="text-center text-[11px] mt-6" style={{ color: 'var(--text-dim)' }}>
+          feito por João Erick
+        </p>
       </div>
     </div>
   );

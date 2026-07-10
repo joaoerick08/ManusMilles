@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, conectarSocket } from '../api';
+import { api, conectarSocket, getUsuario } from '../api';
 import CampoNum from '../components/CampoNum';
 
 const ATRIBUTOS = [
@@ -172,6 +172,7 @@ function Secao({ titulo, children }) {
 }
 
 function AbaFicha({ ficha, atualizarLocal }) {
+  const usuario = getUsuario();
   const atributos = ficha.atributos || {};
   const protecoes = ficha.protecoes || {};
   const sombra = Array.isArray(ficha.pontos_sombra) ? ficha.pontos_sombra : [false, false, false, false, false];
@@ -321,6 +322,19 @@ function AbaFicha({ ficha, atualizarLocal }) {
           </div>
         )}
       />
+
+      {usuario.papel === 'mestre' && (
+        <Secao titulo="🔒 Notas do mestre (só você vê)">
+          <textarea
+            value={ficha.notas_mestre || ''}
+            onChange={e => atualizarLocal({ notas_mestre: e.target.value })}
+            placeholder="Segredos, ganchos de história, coisas que só o mestre sabe sobre esse personagem..."
+            rows={5}
+            className="w-full px-2 py-1.5 rounded text-sm"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--shadow)', color: 'var(--text)' }}
+          />
+        </Secao>
+      )}
     </>
   );
 }

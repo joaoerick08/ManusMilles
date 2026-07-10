@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import FichaJogador from './pages/FichaJogador';
 import PainelMestre from './pages/PainelMestre';
 import MapaInterativo from './pages/MapaInterativo';
+import PainelCombate from './pages/PainelCombate';
 import ImageOverlay from './components/ImageOverlay';
 import ShadowOverlay from './components/ShadowOverlay';
 import TrocarSenha from './components/TrocarSenha';
@@ -26,9 +27,9 @@ export default function App() {
 
   return (
     <div>
-      <header className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+      <header className="flex justify-between items-center px-4 py-3 flex-wrap gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
         <span className="display text-lg" style={{ color: 'var(--gold)' }}>Manus Milles</span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {usuario.papel === 'player' && (
             <div className="flex gap-1">
               <button onClick={() => setViewPlayer('ficha')} className="text-xs px-2 py-1 rounded"
@@ -38,6 +39,10 @@ export default function App() {
               <button onClick={() => setViewPlayer('mapa')} className="text-xs px-2 py-1 rounded"
                 style={viewPlayer === 'mapa' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
                 Mapa
+              </button>
+              <button onClick={() => setViewPlayer('combate')} className="text-xs px-2 py-1 rounded"
+                style={viewPlayer === 'combate' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                Combate
               </button>
             </div>
           )}
@@ -57,9 +62,11 @@ export default function App() {
         ? <PainelMestre />
         : viewPlayer === 'mapa'
           ? <MapaInterativo />
-          : (meuPersonagem
-              ? <FichaJogador personagemId={meuPersonagem} />
-              : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
+          : viewPlayer === 'combate'
+            ? <PainelCombate editavel={false} />
+            : (meuPersonagem
+                ? <FichaJogador personagemId={meuPersonagem} />
+                : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
 
       <ImageOverlay />
       <ShadowOverlay />

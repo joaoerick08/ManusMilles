@@ -62,6 +62,8 @@ async function iniciar() {
       idiomas JSONB DEFAULT '[]',
       ataques JSONB DEFAULT '[]',
 
+      notas_mestre TEXT DEFAULT '',
+
       atualizado_em TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -125,6 +127,9 @@ async function iniciar() {
       UNIQUE(mapa_id, usuario_id)
     );
   `);
+
+  // migração incremental seguras (não quebram se a coluna já existir)
+  await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS notas_mestre TEXT DEFAULT \'\'');
 
   const { rows } = await pool.query("SELECT id FROM usuarios WHERE papel = 'mestre' LIMIT 1");
   if (rows.length === 0) {

@@ -55,6 +55,13 @@ async function personagemCompleto(id) {
   return p;
 }
 
+// Notas do mestre são privadas: nunca vazam pra quem não é mestre (nem em HTTP, nem em socket)
+function ocultarNotasSeNaoMestre(p, usuario) {
+  if (!p || usuario.papel === 'mestre') return p;
+  const { notas_mestre, ...resto } = p;
+  return resto;
+}
+
 router.get('/personagens', async (req, res) => {
   let ids;
   if (req.usuario.papel === 'mestre') {
@@ -64,7 +71,8 @@ router.get('/personagens', async (req, res) => {
     const { rows } = await pool.query('SELECT id FROM personagens WHERE usuario_id = $1', [req.usuario.id]);
     ids = rows.map(r => r.id);
   }
-  res.json(await Promise.all(ids.map(personagemCompleto)));
+  const todos = await Promise.all(ids.map(personagemCompleto));
+  res.json(todos.map(p => ocultarNotasSeNaoMestre(p, req.usuario)));
 });
 
 router.get('/personagens/:id', async (req, res) => {
@@ -73,7 +81,7 @@ router.get('/personagens/:id', async (req, res) => {
   if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
     return res.status(403).json({ erro: 'Sem permissão' });
   }
-  res.json(p);
+  res.json(ocultarNotasSeNaoMestre(p, req.usuario));
 });
 
 const CAMPOS_EDITAVEIS = [
@@ -83,6 +91,7 @@ const CAMPOS_EDITAVEIS = [
   'catarse_total','enfase_atual','enfase_total','deslocamento','tamanho','reducao_dano',
   'iniciativa_bonus','pericias','idiomas','ataques'
 ];
+const CAMPOS_SO_MESTRE = ['notas_mestre'];
 
 router.put('/personagens/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
@@ -91,9 +100,10 @@ router.put('/personagens/:id', async (req, res) => {
   if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
     return res.status(403).json({ erro: 'Sem permissão' });
   }
+  const campos = req.usuario.papel === 'mestre' ? [...CAMPOS_EDITAVEIS, ...CAMPOS_SO_MESTRE] : CAMPOS_EDITAVEIS;
   const sets = []; const valores = [];
   let i = 1;
-  for (const campo of CAMPOS_EDITAVEIS) {
+  for (const campo of campos) {
     if (campo in req.body) {
       sets.push(`${campo} = $${i++}`);
       valores.push(req.body[campo]);
@@ -105,8 +115,8 @@ router.put('/personagens/:id', async (req, res) => {
     await pool.query(`UPDATE personagens SET ${sets.join(', ')} WHERE id = $${i}`, valores);
   }
   const atualizado = await personagemCompleto(req.params.id);
-  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
-  res.json(atualizado);
+  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
+  res.json(ocultarNotasSeNaoMestre(atualizado, req.usuario));
 });
 
 // ---------- TALENTOS (habilidades/magias) ----------

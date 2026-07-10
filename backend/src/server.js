@@ -38,10 +38,32 @@ io.use((socket, next) => {
 });
 
 let gatoAtivo = null; // { id, x, y, enfaseValor }
+const usuariosOnline = new Map(); // socket.id -> { id, nome, papel }
+let combate = { ativo: false, participantes: [], turnoIndex: 0 }; // em memória, por sessão de jogo
+
+function listaOnline() {
+  const vistos = new Set();
+  const lista = [];
+  for (const u of usuariosOnline.values()) {
+    if (vistos.has(u.id)) continue;
+    vistos.add(u.id);
+    lista.push(u);
+  }
+  return lista;
+}
 
 io.on('connection', (socket) => {
   socket.join(`usuario-${socket.usuario.id}`);
   socket.on('entrar-ficha', (personagemId) => socket.join(`personagem-${personagemId}`));
+
+  usuariosOnline.set(socket.id, { id: socket.usuario.id, nome: socket.usuario.nome, papel: socket.usuario.papel });
+  io.emit('usuarios-online', listaOnline());
+  socket.emit('combate-atualizado', combate);
+
+  socket.on('disconnect', () => {
+    usuariosOnline.delete(socket.id);
+    io.emit('usuarios-online', listaOnline());
+  });
 
   socket.on('rolar-dado', (dados) => {
     io.emit('dado-rolado', { ...dados, jogador: socket.usuario.nome, quando: Date.now() });
@@ -76,6 +98,19 @@ io.on('connection', (socket) => {
       console.error('Erro ao creditar catarse do Maxuel:', err);
     }
     io.emit('gato-capturado', { vencedor: socket.usuario.nome, enfaseValor: catarseValor });
+  });
+
+  // ---- painel de combate/iniciativa (só o mestre controla, todos veem) ----
+  socket.on('combate:definir', (novoEstado) => {
+    if (socket.usuario.papel !== 'mestre') return;
+    combate = novoEstado;
+    io.emit('combate-atualizado', combate);
+  });
+
+  socket.on('combate:encerrar', () => {
+    if (socket.usuario.papel !== 'mestre') return;
+    combate = { ativo: false, participantes: [], turnoIndex: 0 };
+    io.emit('combate-atualizado', combate);
   });
 });
 
