@@ -361,7 +361,19 @@ router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), asy
         pericias.push({ nome: nomeCompleto, total: total ?? 0, proficiente: false, outros: outros || undefined });
       }
     }
-    if (pericias.length) atualizacoes.pericias = pericias;
+    if (pericias.length) {
+      // completa com as perícias oficiais que não vieram preenchidas no PDF, sem perder nada
+      const nomesImportados = pericias.map(p => p.nome.toLowerCase());
+      const importouAptidao = nomesImportados.some(n => n.startsWith('aptidão'));
+      const faltantes = PERICIAS_PADRAO.filter(p => {
+        const nomeMin = p.nome.toLowerCase();
+        if (importouAptidao && nomeMin.startsWith('aptidão')) return false;
+        return !nomesImportados.includes(nomeMin);
+      });
+      atualizacoes.pericias = [...pericias, ...faltantes];
+    } else {
+      atualizacoes.pericias = PERICIAS_PADRAO;
+    }
 
     const CAMPOS_VALIDOS = ['nome','pronomes','jogadore','legado','heranca','antecedente','maldicao',
       'iniciativa_bonus','reducao_dano','deslocamento','tamanho','pv_max','pv_atual','pv_temp',
