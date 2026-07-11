@@ -175,8 +175,24 @@ function Secao({ titulo, children }) {
   );
 }
 
+const PERICIAS_PADRAO = [
+  'Apresentação', 'Arcanismo', 'Cultura', 'Diplomacia', 'Doutrinas', 'Furtividade',
+  'Intimidação', 'Intuição', 'Magitec', 'Malandragem', 'Manipulação', 'Medicina',
+  'Natureza', 'Percepção', 'Preparo Físico',
+];
+
 function AbaFicha({ ficha, atualizarLocal }) {
   const usuario = getUsuario();
+
+  function carregarPericiasPadrao() {
+    const atuais = ficha.pericias || [];
+    const nomesExistentes = atuais.map(p => (p.nome || '').trim().toLowerCase());
+    const faltantes = PERICIAS_PADRAO
+      .filter(nome => !nomesExistentes.includes(nome.toLowerCase()))
+      .map(nome => ({ nome, proficiente: false, total: 0 }));
+    if (faltantes.length === 0) return;
+    atualizarLocal({ pericias: [...atuais, ...faltantes] });
+  }
 
   function rolarPericia(item) {
     const socket = conectarSocket();
@@ -306,6 +322,12 @@ function AbaFicha({ ficha, atualizarLocal }) {
         </div>
       </Secao>
 
+      <div className="flex justify-end mb-1">
+        <button onClick={carregarPericiasPadrao} className="text-xs px-2 py-1 rounded"
+          style={{ border: '1px dashed var(--gold)', color: 'var(--gold)' }}>
+          carregar perícias oficiais do Skyfall
+        </button>
+      </div>
       <ListaEditavel
         titulo="Perícias"
         itens={ficha.pericias || []}

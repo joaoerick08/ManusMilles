@@ -22,6 +22,13 @@ router.get('/usuarios', apenasMestre, async (req, res) => {
   res.json(rows);
 });
 
+const PERICIAS_PADRAO = [
+  'Apresentação', 'Arcanismo', 'Cultura', 'Diplomacia', 'Doutrinas', 'Furtividade',
+  'Intimidação', 'Intuição', 'Magitec', 'Malandragem', 'Manipulação', 'Medicina',
+  'Natureza', 'Percepção', 'Preparo Físico',
+  'Aptidão com ___', 'Aptidão com ___', 'Aptidão com ___',
+].map(nome => ({ nome, proficiente: false, total: 0 }));
+
 router.post('/usuarios', apenasMestre, async (req, res) => {
   const { nome, login, senha } = req.body;
   if (!nome || !login || !senha) return res.status(400).json({ erro: 'Preencha nome, login e senha' });
@@ -31,7 +38,10 @@ router.post('/usuarios', apenasMestre, async (req, res) => {
       "INSERT INTO usuarios (nome, login, senha_hash, papel) VALUES ($1, $2, $3, 'player') RETURNING id",
       [nome, login, hash]
     );
-    await pool.query('INSERT INTO personagens (usuario_id, nome) VALUES ($1, $2)', [rows[0].id, nome]);
+    await pool.query(
+      'INSERT INTO personagens (usuario_id, nome, pericias) VALUES ($1, $2, $3)',
+      [rows[0].id, nome, JSON.stringify(PERICIAS_PADRAO)]
+    );
     res.json({ id: rows[0].id });
   } catch (e) {
     res.status(400).json({ erro: 'Login já existe' });
