@@ -100,6 +100,16 @@ async function iniciar() {
       observacoes TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS pericias_personagem (
+      id SERIAL PRIMARY KEY,
+      personagem_id INTEGER NOT NULL REFERENCES personagens(id) ON DELETE CASCADE,
+      nome TEXT NOT NULL,
+      proficiente BOOLEAN DEFAULT false,
+      total INTEGER DEFAULT 0,
+      outros TEXT,
+      ordem INTEGER DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS broadcasts (
       id SERIAL PRIMARY KEY,
       url TEXT NOT NULL,
@@ -128,8 +138,27 @@ async function iniciar() {
     );
   `);
 
-  // migração incremental seguras (não quebram se a coluna já existir)
+  // migração incremental segura (não quebra se a coluna já existir)
   await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS notas_mestre TEXT DEFAULT \'\'');
+
+  // migração de dados: mover perícias do JSONB antigo pra tabela própria (uma vez só por personagem)
+  const { rows: comPericiasAntigas } = await pool.query(`
+    SELECT id, pericias FROM personagens
+    WHERE pericias IS NOT NULL AND jsonb_array_length(pericias) > 0
+      AND NOT EXISTS (SELECT 1 FROM pericias_personagem WHERE personagem_id = personagens.id)
+  `);
+  for (const p of comPericiasAntigas) {
+    let ordem = 0;
+    for (const item of p.pericias) {
+      await pool.query(
+        'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, outros, ordem) VALUES ($1,$2,$3,$4,$5,$6)',
+        [p.id, item.nome || '', !!item.proficiente, Number(item.total) || 0, item.outros || null, ordem++]
+      );
+    }
+  }
+  if (comPericiasAntigas.length > 0) {
+    console.log(`Migradas as perícias de ${comPericiasAntigas.length} personagem(ns) pro novo formato.`);
+  }
 
   const { rows } = await pool.query("SELECT id FROM usuarios WHERE papel = 'mestre' LIMIT 1");
   if (rows.length === 0) {

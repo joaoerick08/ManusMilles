@@ -38,10 +38,18 @@ router.post('/usuarios', apenasMestre, async (req, res) => {
       "INSERT INTO usuarios (nome, login, senha_hash, papel) VALUES ($1, $2, $3, 'player') RETURNING id",
       [nome, login, hash]
     );
-    await pool.query(
-      'INSERT INTO personagens (usuario_id, nome, pericias) VALUES ($1, $2, $3)',
-      [rows[0].id, nome, JSON.stringify(PERICIAS_PADRAO)]
+    const { rows: personagemRows } = await pool.query(
+      'INSERT INTO personagens (usuario_id, nome) VALUES ($1, $2) RETURNING id',
+      [rows[0].id, nome]
     );
+    const personagemId = personagemRows[0].id;
+    let ordem = 0;
+    for (const item of PERICIAS_PADRAO) {
+      await pool.query(
+        'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, ordem) VALUES ($1,$2,$3,$4,$5)',
+        [personagemId, item.nome, false, 0, ordem++]
+      );
+    }
     res.json({ id: rows[0].id });
   } catch (e) {
     res.status(400).json({ erro: 'Login já existe' });
@@ -60,8 +68,10 @@ async function personagemCompleto(id) {
   if (!p) return null;
   const talentos = await pool.query('SELECT * FROM talentos WHERE personagem_id = $1 ORDER BY ordem ASC, id ASC', [id]);
   const inventario = await pool.query('SELECT * FROM inventario WHERE personagem_id = $1', [id]);
+  const pericias = await pool.query('SELECT * FROM pericias_personagem WHERE personagem_id = $1 ORDER BY ordem ASC, id ASC', [id]);
   p.talentos = talentos.rows;
   p.inventario = inventario.rows;
+  p.pericias = pericias.rows;
   return p;
 }
 
@@ -99,7 +109,7 @@ const CAMPOS_EDITAVEIS = [
   'bonus_proficiencia','foto_url','atributos','protecoes','pv_max','pv_atual','pv_temp',
   'dados_vida_total','dados_vida_usados','pontos_sombra','testes_morte','catarse_atual',
   'catarse_total','enfase_atual','enfase_total','deslocamento','tamanho','reducao_dano',
-  'iniciativa_bonus','pericias','idiomas','ataques'
+  'iniciativa_bonus','idiomas','ataques'
 ];
 const CAMPOS_SO_MESTRE = ['notas_mestre'];
 
@@ -134,7 +144,7 @@ const CAMPOS_TALENTO = ['nome','trilha','tipo','execucao','custo','alcance','alv
 
 async function emitirFicha(req, personagemId) {
   const atualizado = await personagemCompleto(personagemId);
-  if (atualizado) req.io.to(`personagem-${personagemId}`).emit('ficha-atualizada', atualizado);
+  if (atualizado) req.io.to(`personagem-${personagemId}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
 }
 
 router.post('/personagens/:id/talentos', async (req, res) => {
@@ -171,6 +181,61 @@ router.delete('/talentos/:id', async (req, res) => {
   const talento = rows[0];
   await pool.query('DELETE FROM talentos WHERE id = $1', [req.params.id]);
   if (talento) await emitirFicha(req, talento.personagem_id);
+  res.json({ ok: true });
+});
+
+// ---------- PERÍCIAS (cada uma salva separada, evita conflito quando duas pessoas editam ao mesmo tempo) ----------
+router.post('/personagens/:id/pericias', async (req, res) => {
+  const { nome, proficiente, total, outros } = req.body;
+  if (!('ordem' in req.body)) {
+    const { rows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
+    req.body.ordem = rows[0].m + 1;
+  }
+  const { rows } = await pool.query(
+    'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, outros, ordem) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+    [req.params.id, nome || '', !!proficiente, total || 0, outros || null, req.body.ordem]
+  );
+  await emitirFicha(req, req.params.id);
+  res.json({ id: rows[0].id });
+});
+
+router.put('/pericias/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT personagem_id FROM pericias_personagem WHERE id = $1', [req.params.id]);
+  const pericia = rows[0];
+  const CAMPOS_PERICIA = ['nome', 'proficiente', 'total', 'outros', 'ordem'];
+  const sets = []; const valores = [];
+  let i = 1;
+  for (const c of CAMPOS_PERICIA) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(req.body[c]); }
+  if (sets.length) {
+    valores.push(req.params.id);
+    await pool.query(`UPDATE pericias_personagem SET ${sets.join(', ')} WHERE id = $${i}`, valores);
+  }
+  if (pericia) await emitirFicha(req, pericia.personagem_id);
+  res.json({ ok: true });
+});
+
+router.delete('/pericias/:id', async (req, res) => {
+  const { rows } = await pool.query('SELECT personagem_id FROM pericias_personagem WHERE id = $1', [req.params.id]);
+  const pericia = rows[0];
+  await pool.query('DELETE FROM pericias_personagem WHERE id = $1', [req.params.id]);
+  if (pericia) await emitirFicha(req, pericia.personagem_id);
+  res.json({ ok: true });
+});
+
+// adiciona as perícias oficiais que ainda faltarem pra esse personagem (não duplica as já existentes)
+router.post('/personagens/:id/pericias/carregar-padrao', async (req, res) => {
+  const { rows: existentes } = await pool.query('SELECT nome FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
+  const nomesExistentes = existentes.map(p => p.nome.toLowerCase());
+  const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
+  let ordem = maxRows[0].m + 1;
+  for (const item of PERICIAS_PADRAO) {
+    if (nomesExistentes.includes(item.nome.toLowerCase())) continue;
+    await pool.query(
+      'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, ordem) VALUES ($1,$2,$3,$4,$5)',
+      [req.params.id, item.nome, false, 0, ordem++]
+    );
+  }
+  await emitirFicha(req, req.params.id);
   res.json({ ok: true });
 });
 
@@ -361,6 +426,7 @@ router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), asy
         pericias.push({ nome: nomeCompleto, total: total ?? 0, proficiente: false, outros: outros || undefined });
       }
     }
+    let periciasParaSalvar;
     if (pericias.length) {
       // completa com as perícias oficiais que não vieram preenchidas no PDF, sem perder nada
       const nomesImportados = pericias.map(p => p.nome.toLowerCase());
@@ -370,15 +436,15 @@ router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), asy
         if (importouAptidao && nomeMin.startsWith('aptidão')) return false;
         return !nomesImportados.includes(nomeMin);
       });
-      atualizacoes.pericias = [...pericias, ...faltantes];
+      periciasParaSalvar = [...pericias, ...faltantes];
     } else {
-      atualizacoes.pericias = PERICIAS_PADRAO;
+      periciasParaSalvar = PERICIAS_PADRAO;
     }
 
     const CAMPOS_VALIDOS = ['nome','pronomes','jogadore','legado','heranca','antecedente','maldicao',
       'iniciativa_bonus','reducao_dano','deslocamento','tamanho','pv_max','pv_atual','pv_temp',
       'dados_vida_total','dados_vida_usados','bonus_proficiencia','enfase_atual','enfase_total',
-      'catarse_atual','catarse_total','atributos','protecoes','pericias'];
+      'catarse_atual','catarse_total','atributos','protecoes'];
     const sets = []; const valores = [];
     let i = 1;
     for (const campo of CAMPOS_VALIDOS) {
@@ -390,6 +456,16 @@ router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), asy
     if (sets.length) {
       valores.push(req.params.id);
       await pool.query(`UPDATE personagens SET ${sets.join(', ')}, atualizado_em = NOW() WHERE id = $${i}`, valores);
+    }
+
+    // substitui as perícias desse personagem pelas importadas (ação explícita e única, sem risco de conflito concorrente)
+    await pool.query('DELETE FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
+    let ordemPericia = 0;
+    for (const item of periciasParaSalvar) {
+      await pool.query(
+        'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, outros, ordem) VALUES ($1,$2,$3,$4,$5,$6)',
+        [req.params.id, item.nome, !!item.proficiente, item.total || 0, item.outros || null, ordemPericia++]
+      );
     }
 
     let itensImportados = 0;

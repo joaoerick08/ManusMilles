@@ -63,7 +63,7 @@ export default function FichaJogador({ personagemId }) {
       </div>
 
       <div className="px-4 mt-4">
-        {aba === 'ficha' && <AbaFicha ficha={ficha} atualizarLocal={atualizarLocal} />}
+        {aba === 'ficha' && <AbaFicha ficha={ficha} atualizarLocal={atualizarLocal} personagemId={personagemId} recarregar={carregar} />}
         {aba === 'talentos' && (
           <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos} recarregar={carregar}
             filtro={t => t.tipo !== 'Magia'} tipoPadrao="Habilidade" tituloAdicionar="nova habilidade/talento" />
@@ -175,36 +175,8 @@ function Secao({ titulo, children }) {
   );
 }
 
-const PERICIAS_PADRAO = [
-  'Apresentação', 'Arcanismo', 'Cultura', 'Diplomacia', 'Doutrinas', 'Furtividade',
-  'Intimidação', 'Intuição', 'Magitec', 'Malandragem', 'Manipulação', 'Medicina',
-  'Natureza', 'Percepção', 'Preparo Físico',
-];
-
-function AbaFicha({ ficha, atualizarLocal }) {
+function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
   const usuario = getUsuario();
-
-  function carregarPericiasPadrao() {
-    const atuais = ficha.pericias || [];
-    const nomesExistentes = atuais.map(p => (p.nome || '').trim().toLowerCase());
-    const faltantes = PERICIAS_PADRAO
-      .filter(nome => !nomesExistentes.includes(nome.toLowerCase()))
-      .map(nome => ({ nome, proficiente: false, total: 0 }));
-    if (faltantes.length === 0) return;
-    atualizarLocal({ pericias: [...atuais, ...faltantes] });
-  }
-
-  function rolarPericia(item) {
-    const socket = conectarSocket();
-    const d20 = 1 + Math.floor(Math.random() * 20);
-    const bonus = Number(item.total) || 0;
-    const resultado = d20 + bonus;
-    socket.emit('rolar-dado', {
-      expressao: `${item.nome || 'Perícia'} (1d20${bonus >= 0 ? '+' : ''}${bonus})`,
-      valores: [d20],
-      resultado,
-    });
-  }
   const atributos = ficha.atributos || {};
   const protecoes = ficha.protecoes || {};
   const sombra = Array.isArray(ficha.pontos_sombra) ? ficha.pontos_sombra : [false, false, false, false, false];
@@ -322,30 +294,7 @@ function AbaFicha({ ficha, atualizarLocal }) {
         </div>
       </Secao>
 
-      <div className="flex justify-end mb-1">
-        <button onClick={carregarPericiasPadrao} className="text-xs px-2 py-1 rounded"
-          style={{ border: '1px dashed var(--gold)', color: 'var(--gold)' }}>
-          carregar perícias oficiais do Skyfall
-        </button>
-      </div>
-      <ListaEditavel
-        titulo="Perícias"
-        itens={ficha.pericias || []}
-        onChange={v => atualizarLocal({ pericias: v })}
-        novoItem={() => ({ nome: '', proficiente: false, total: 0 })}
-        renderItem={(item, atualizar, remover) => (
-          <div className="flex items-center gap-2">
-            <button onClick={() => rolarPericia(item)} title="Rolar 1d20 + bônus"
-              className="text-base flex-shrink-0 hover:opacity-70 transition-opacity">🎲</button>
-            <input value={item.nome} onChange={e => atualizar({ ...item, nome: e.target.value })} placeholder="Nome"
-              className="flex-1 px-2 py-1 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-            <input type="checkbox" checked={!!item.proficiente} onChange={e => atualizar({ ...item, proficiente: e.target.checked })} />
-            <input type="number" value={item.total} onChange={e => atualizar({ ...item, total: Number(e.target.value) })}
-              className="w-14 px-2 py-1 rounded text-sm text-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-            <button onClick={remover} style={{ color: 'var(--danger)' }}>✕</button>
-          </div>
-        )}
-      />
+      <SecaoPericias personagemId={personagemId} pericias={ficha.pericias || []} recarregar={recarregar} />
 
       <ListaEditavel
         titulo="Ataques"
@@ -438,6 +387,83 @@ function CampoTexto({ label, value, onChange, small }) {
         className={`px-2 py-1 rounded ${small ? 'w-24 text-center' : 'w-full'}`}
         style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
     </div>
+  );
+}
+
+function LinhaPericia({ item, salvar, remover, rolar }) {
+  const [valores, setValores] = useState(item);
+  const salvarTimeout = useRef(null);
+
+  function mudar(campos) {
+    const novo = { ...valores, ...campos };
+    setValores(novo);
+    clearTimeout(salvarTimeout.current);
+    salvarTimeout.current = setTimeout(() => salvar(novo), 400);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={() => rolar(valores)} title="Rolar 1d20 + bônus"
+        className="text-base flex-shrink-0 hover:opacity-70 transition-opacity">🎲</button>
+      <input value={valores.nome} onChange={e => mudar({ nome: e.target.value })} placeholder="Nome"
+        className="flex-1 px-2 py-1 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+      <input type="checkbox" checked={!!valores.proficiente} onChange={e => mudar({ proficiente: e.target.checked })} />
+      <input type="number" value={valores.total} onChange={e => mudar({ total: Number(e.target.value) })}
+        className="w-14 px-2 py-1 rounded text-sm text-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+      <button onClick={remover} style={{ color: 'var(--danger)' }}>✕</button>
+    </div>
+  );
+}
+
+function SecaoPericias({ personagemId, pericias, recarregar }) {
+  function rolar(item) {
+    const socket = conectarSocket();
+    const d20 = 1 + Math.floor(Math.random() * 20);
+    const bonus = Number(item.total) || 0;
+    socket.emit('rolar-dado', {
+      expressao: `${item.nome || 'Perícia'} (1d20${bonus >= 0 ? '+' : ''}${bonus})`,
+      valores: [d20],
+      resultado: d20 + bonus,
+    });
+  }
+
+  async function adicionar() {
+    await api.post(`/personagens/${personagemId}/pericias`, { nome: '', proficiente: false, total: 0 });
+    recarregar();
+  }
+
+  async function salvar(id, valores) {
+    await api.put(`/pericias/${id}`, valores);
+    recarregar();
+  }
+
+  async function remover(id) {
+    await api.delete(`/pericias/${id}`);
+    recarregar();
+  }
+
+  async function carregarPadrao() {
+    await api.post(`/personagens/${personagemId}/pericias/carregar-padrao`);
+    recarregar();
+  }
+
+  return (
+    <Secao titulo="Perícias">
+      <div className="flex justify-end mb-2">
+        <button onClick={carregarPadrao} className="text-xs px-2 py-1 rounded" style={{ border: '1px dashed var(--gold)', color: 'var(--gold)' }}>
+          carregar perícias oficiais do Skyfall
+        </button>
+      </div>
+      <div className="space-y-2">
+        {pericias.map(item => (
+          <LinhaPericia key={item.id} item={item} rolar={rolar}
+            salvar={(v) => salvar(item.id, v)} remover={() => remover(item.id)} />
+        ))}
+      </div>
+      <button onClick={adicionar} className="mt-3 text-xs px-3 py-1.5 rounded" style={{ border: '1px dashed var(--gold)', color: 'var(--gold)' }}>
+        + adicionar
+      </button>
+    </Secao>
   );
 }
 
