@@ -177,6 +177,18 @@ function Secao({ titulo, children }) {
 
 function AbaFicha({ ficha, atualizarLocal }) {
   const usuario = getUsuario();
+
+  function rolarPericia(item) {
+    const socket = conectarSocket();
+    const d20 = 1 + Math.floor(Math.random() * 20);
+    const bonus = Number(item.total) || 0;
+    const resultado = d20 + bonus;
+    socket.emit('rolar-dado', {
+      expressao: `${item.nome || 'Perícia'} (1d20${bonus >= 0 ? '+' : ''}${bonus})`,
+      valores: [d20],
+      resultado,
+    });
+  }
   const atributos = ficha.atributos || {};
   const protecoes = ficha.protecoes || {};
   const sombra = Array.isArray(ficha.pontos_sombra) ? ficha.pontos_sombra : [false, false, false, false, false];
@@ -301,6 +313,8 @@ function AbaFicha({ ficha, atualizarLocal }) {
         novoItem={() => ({ nome: '', proficiente: false, total: 0 })}
         renderItem={(item, atualizar, remover) => (
           <div className="flex items-center gap-2">
+            <button onClick={() => rolarPericia(item)} title="Rolar 1d20 + bônus"
+              className="text-base flex-shrink-0 hover:opacity-70 transition-opacity">🎲</button>
             <input value={item.nome} onChange={e => atualizar({ ...item, nome: e.target.value })} placeholder="Nome"
               className="flex-1 px-2 py-1 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
             <input type="checkbox" checked={!!item.proficiente} onChange={e => atualizar({ ...item, proficiente: e.target.checked })} />
