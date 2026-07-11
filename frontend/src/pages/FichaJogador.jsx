@@ -11,6 +11,7 @@ export default function FichaJogador({ personagemId }) {
   const [ficha, setFicha] = useState(null);
   const [aba, setAba] = useState('ficha');
   const salvarTimeout = useRef(null);
+  const pendentes = useRef({});
 
   const carregar = useCallback(async () => {
     const { data } = await api.get(`/personagens/${personagemId}`);
@@ -34,9 +35,12 @@ export default function FichaJogador({ personagemId }) {
 
   function atualizarLocal(campos) {
     setFicha((f) => ({ ...f, ...campos }));
+    pendentes.current = { ...pendentes.current, ...campos };
     clearTimeout(salvarTimeout.current);
     salvarTimeout.current = setTimeout(() => {
-      api.put(`/personagens/${personagemId}`, campos).catch(() => {});
+      const paraSalvar = pendentes.current;
+      pendentes.current = {};
+      api.put(`/personagens/${personagemId}`, paraSalvar).catch(() => {});
     }, 500);
   }
 
