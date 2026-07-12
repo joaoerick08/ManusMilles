@@ -144,10 +144,14 @@ async function iniciar() {
   // migração de dados: mover perícias do JSONB antigo pra tabela própria (uma vez só por personagem)
   const { rows: comPericiasAntigas } = await pool.query(`
     SELECT id, pericias FROM personagens
-    WHERE pericias IS NOT NULL AND jsonb_array_length(pericias) > 0
+    WHERE pericias IS NOT NULL
+      AND jsonb_typeof(pericias) = 'array'
       AND NOT EXISTS (SELECT 1 FROM pericias_personagem WHERE personagem_id = personagens.id)
   `);
+  let totalMigrados = 0;
   for (const p of comPericiasAntigas) {
+    if (!Array.isArray(p.pericias) || p.pericias.length === 0) continue;
+    totalMigrados++;
     let ordem = 0;
     for (const item of p.pericias) {
       await pool.query(
@@ -156,8 +160,8 @@ async function iniciar() {
       );
     }
   }
-  if (comPericiasAntigas.length > 0) {
-    console.log(`Migradas as perícias de ${comPericiasAntigas.length} personagem(ns) pro novo formato.`);
+  if (totalMigrados > 0) {
+    console.log(`Migradas as perícias de ${totalMigrados} personagem(ns) pro novo formato.`);
   }
 
   const { rows } = await pool.query("SELECT id FROM usuarios WHERE papel = 'mestre' LIMIT 1");
