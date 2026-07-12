@@ -1,7 +1,59 @@
 import { useEffect, useState } from 'react';
 import { conectarSocket, api } from '../api';
+import { CONDICOES } from '../condicoes';
 
 function novoId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
+
+function SeletorCondicoes({ ativas, onMudar }) {
+  const [aberto, setAberto] = useState(false);
+
+  function alternar(nome) {
+    const novas = ativas.includes(nome) ? ativas.filter(c => c !== nome) : [...ativas, nome];
+    onMudar(novas);
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button onClick={() => setAberto(!aberto)} className="text-xs px-2 py-0.5 rounded"
+        style={{ border: '1px dashed var(--shadow)', color: 'var(--shadow)' }}>
+        + condição
+      </button>
+      {aberto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute z-20 mt-1 right-0 w-56 max-h-64 overflow-y-auto rounded-lg p-2 shadow-2xl"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            {CONDICOES.map(c => (
+              <label key={c.nome} title={c.descricao}
+                className="flex items-center gap-2 text-xs py-1 px-1 rounded cursor-pointer hover:opacity-80"
+                style={{ color: ativas.includes(c.nome) ? 'var(--gold)' : 'var(--text)' }}>
+                <input type="checkbox" checked={ativas.includes(c.nome)} onChange={() => alternar(c.nome)} />
+                {c.nome}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BadgesCondicoes({ condicoes }) {
+  if (!condicoes || condicoes.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {condicoes.map(nome => {
+        const info = CONDICOES.find(c => c.nome === nome);
+        return (
+          <span key={nome} title={info?.descricao || ''} className="text-[10px] px-1.5 py-0.5 rounded cursor-help"
+            style={{ background: 'rgba(109,63,158,0.25)', color: '#c9a8ec', border: '1px solid var(--shadow)' }}>
+            {nome}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function PainelCombate({ editavel }) {
   const [combate, setCombate] = useState({ ativo: false, participantes: [], turnoIndex: 0 });
@@ -105,6 +157,12 @@ export default function PainelCombate({ editavel }) {
                   {p.nome} {p.npc && <span style={{ color: 'var(--text-dim)' }}>(NPC)</span>} {daVez && <span style={{ color: 'var(--gold)' }}>· turno atual</span>}
                 </p>
                 <p className="text-xs" style={{ color: 'var(--text-dim)' }}>PV: {p.pv_atual}/{p.pv_max}</p>
+                <BadgesCondicoes condicoes={p.condicoes} />
+                {editavel && (
+                  <div className="mt-1">
+                    <SeletorCondicoes ativas={p.condicoes || []} onMudar={(novas) => atualizarParticipante(p.id, { condicoes: novas })} />
+                  </div>
+                )}
               </div>
               {editavel && (
                 <div className="flex items-center gap-1 flex-shrink-0">
