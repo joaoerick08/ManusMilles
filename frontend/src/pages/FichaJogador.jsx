@@ -248,6 +248,7 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
           <CampoNum label="Dados usados" value={ficha.dados_vida_usados} onChange={v => atualizarLocal({ dados_vida_usados: v })} />
           <CampoNum label="Dados totais" value={ficha.dados_vida_total} onChange={v => atualizarLocal({ dados_vida_total: v })} />
         </div>
+        {(ficha.pv_atual || 0) <= 0 && <TestesDeMorte ficha={ficha} atualizarLocal={atualizarLocal} />}
       </Secao>
 
       <Secao titulo="Pontos de Sombra">
@@ -325,6 +326,74 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
         </Secao>
       )}
     </>
+  );
+}
+
+function TestesDeMorte({ ficha, atualizarLocal }) {
+  const testes = ficha.testes_morte && typeof ficha.testes_morte === 'object'
+    ? ficha.testes_morte : { sucessos: 0, falhas: 0 };
+  const morto = (ficha.pv_atual || 0) <= -(ficha.pv_max || 0) && (ficha.pv_max || 0) > 0;
+
+  function rolar() {
+    if (morto) return;
+    const socket = conectarSocket();
+    const d20 = 1 + Math.floor(Math.random() * 20);
+    const sucesso = d20 >= 10;
+    socket.emit('rolar-dado', {
+      contexto: `${ficha.nome || 'Personagem'} · Teste de Morte`,
+      expressao: '1d20 (10+ é sucesso)',
+      valores: [d20],
+      resultado: d20,
+    });
+
+    let { sucessos, falhas } = testes;
+    if (sucesso) sucessos = Math.min(3, sucessos + 1); else falhas = Math.min(3, falhas + 1);
+    atualizarLocal({ testes_morte: { sucessos, falhas } });
+  }
+
+  function resetar() {
+    atualizarLocal({ testes_morte: { sucessos: 0, falhas: 0 } });
+  }
+
+  const estabilizado = testes.sucessos >= 3;
+  const morreu = testes.falhas >= 3;
+
+  return (
+    <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(140,44,58,0.15)', border: '1px solid var(--danger)' }}>
+      <p className="text-sm font-semibold mb-2" style={{ color: 'var(--danger)' }}>
+        {morto ? '💀 MORTO — PV negativo igual ao máximo' : morreu ? '💀 MORREU (3 falhas)' : estabilizado ? '✅ ESTABILIZADO (3 sucessos)' : '⚠️ MORRENDO — faça um teste de morte no início do turno'}
+      </p>
+
+      <div className="flex items-center gap-4 mb-3">
+        <div>
+          <p className="text-[10px] mb-1" style={{ color: 'var(--text-dim)' }}>Sucessos</p>
+          <div className="flex gap-1">
+            {[0, 1, 2].map(i => (
+              <span key={i} className="w-5 h-5 rounded-full border-2" style={{ borderColor: '#3a8c5a', background: i < testes.sucessos ? '#3a8c5a' : 'transparent' }} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] mb-1" style={{ color: 'var(--text-dim)' }}>Falhas</p>
+          <div className="flex gap-1">
+            {[0, 1, 2].map(i => (
+              <span key={i} className="w-5 h-5 rounded-full border-2" style={{ borderColor: 'var(--danger)', background: i < testes.falhas ? 'var(--danger)' : 'transparent' }} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        {!morto && !morreu && !estabilizado && (
+          <button onClick={rolar} className="text-xs px-3 py-1.5 rounded font-medium" style={{ background: 'var(--gold)', color: '#120810' }}>
+            🎲 Rolar teste de morte
+          </button>
+        )}
+        <button onClick={resetar} className="text-xs px-3 py-1.5 rounded" style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+          resetar
+        </button>
+      </div>
+    </div>
   );
 }
 
