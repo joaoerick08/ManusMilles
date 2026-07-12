@@ -50,7 +50,7 @@ export default function DiceRoller() {
       </button>
 
       {aberto && (
-        <div className="fixed bottom-24 right-5 w-72 max-w-[90vw] rounded-lg p-4 z-40 shadow-2xl"
+        <div className="fixed bottom-24 right-5 w-96 max-w-[92vw] rounded-lg p-4 z-40 shadow-2xl"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <h4 className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--gold)' }}>Rolar dados</h4>
 
@@ -77,11 +77,15 @@ export default function DiceRoller() {
             Rolar {qtd}d{lado}{mod > 0 ? `+${mod}` : mod < 0 ? mod : ''}
           </button>
 
-          <div className="space-y-1 max-h-40 overflow-y-auto">
+          <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {historico.map((h, i) => (
-              <div key={i} className="text-xs flex justify-between" style={{ color: 'var(--text-dim)' }}>
-                <span>{h.jogador}: {h.expressao} [{h.valores.join(', ')}]</span>
-                <b style={{ color: 'var(--gold)' }}>{h.resultado}</b>
+              <div key={i} className="text-xs flex items-center justify-between gap-2 py-1" style={{ color: 'var(--text-dim)', borderBottom: i < historico.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <span className="min-w-0">
+                  <b style={{ color: 'var(--text)' }}>{h.jogador}</b>
+                  {h.contexto && <> · <span style={{ color: 'var(--gold)' }}>{h.contexto}</span></>}
+                  {' '}· {h.expressao} [{h.valores.join(', ')}]
+                </span>
+                <b className="flex-shrink-0 text-sm" style={{ color: 'var(--gold)' }}>{h.resultado}</b>
               </div>
             ))}
             {historico.length === 0 && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Nenhuma rolagem ainda.</p>}

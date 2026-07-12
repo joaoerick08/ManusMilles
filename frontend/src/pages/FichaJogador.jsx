@@ -421,7 +421,8 @@ function SecaoPericias({ personagemId, pericias, recarregar }) {
     const d20 = 1 + Math.floor(Math.random() * 20);
     const bonus = Number(item.total) || 0;
     socket.emit('rolar-dado', {
-      expressao: `${item.nome || 'Perícia'} (1d20${bonus >= 0 ? '+' : ''}${bonus})`,
+      contexto: item.nome && item.nome.trim() ? item.nome.trim() : 'Perícia sem nome',
+      expressao: `1d20${bonus >= 0 ? '+' : ''}${bonus}`,
       valores: [d20],
       resultado: d20 + bonus,
     });
