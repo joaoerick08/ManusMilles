@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { conectarSocket } from '../api';
+import { tocarSomDado, tocarSomCritico, tocarSomFalha } from '../audio';
 
 const TIPOS_DADO = [4, 6, 8, 10, 12, 20, 100];
 
@@ -19,7 +20,13 @@ export default function DiceRoller() {
 
   useEffect(() => {
     const socket = conectarSocket();
-    const aoRolar = (dados) => setHistorico((h) => [dados, ...h].slice(0, 8));
+    const aoRolar = (dados) => {
+      setHistorico((h) => [dados, ...h].slice(0, 8));
+      const ehD20Unico = /1d20/.test(dados.expressao || '');
+      if (ehD20Unico && dados.valores[0] === 20) tocarSomCritico();
+      else if (ehD20Unico && dados.valores[0] === 1) tocarSomFalha();
+      else tocarSomDado();
+    };
     socket.on('dado-rolado', aoRolar);
     return () => socket.off('dado-rolado', aoRolar);
   }, []);
