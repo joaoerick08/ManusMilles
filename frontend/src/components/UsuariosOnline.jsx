@@ -8,6 +8,7 @@ export default function UsuariosOnline() {
     const socket = conectarSocket();
     const aoAtualizar = (l) => setLista(l);
     socket.on('usuarios-online', aoAtualizar);
+    socket.emit('pedir-online');
     return () => socket.off('usuarios-online', aoAtualizar);
   }, []);
 

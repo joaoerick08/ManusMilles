@@ -21,6 +21,7 @@ export default function SelecaoJogadores() {
     });
     socket.on('usuarios-online', aoAtualizarOnline);
     socket.on('personagem-publico-atualizado', aoAtualizarPersonagem);
+    socket.emit('pedir-online');
     return () => {
       socket.off('usuarios-online', aoAtualizarOnline);
       socket.off('personagem-publico-atualizado', aoAtualizarPersonagem);

@@ -60,6 +60,10 @@ io.on('connection', (socket) => {
   io.emit('usuarios-online', listaOnline());
   socket.emit('combate-atualizado', combate);
 
+  socket.on('pedir-online', () => {
+    socket.emit('usuarios-online', listaOnline());
+  });
+
   socket.on('disconnect', () => {
     usuariosOnline.delete(socket.id);
     io.emit('usuarios-online', listaOnline());
