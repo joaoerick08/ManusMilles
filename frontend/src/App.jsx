@@ -5,6 +5,7 @@ import FichaJogador from './pages/FichaJogador';
 import PainelMestre from './pages/PainelMestre';
 import MapaInterativo from './pages/MapaInterativo';
 import PainelCombate from './pages/PainelCombate';
+import SelecaoJogadores from './pages/SelecaoJogadores';
 import ImageOverlay from './components/ImageOverlay';
 import ShadowOverlay from './components/ShadowOverlay';
 import TrocarSenha from './components/TrocarSenha';
@@ -31,7 +32,7 @@ export default function App() {
         <span className="display text-lg" style={{ color: 'var(--gold)' }}>Manus Milles</span>
         <div className="flex items-center gap-3 flex-wrap">
           {usuario.papel === 'player' && (
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               <button onClick={() => setViewPlayer('ficha')} className="text-xs px-2 py-1 rounded"
                 style={viewPlayer === 'ficha' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
                 Ficha
@@ -43,6 +44,10 @@ export default function App() {
               <button onClick={() => setViewPlayer('combate')} className="text-xs px-2 py-1 rounded"
                 style={viewPlayer === 'combate' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
                 Combate
+              </button>
+              <button onClick={() => setViewPlayer('selecao')} className="text-xs px-2 py-1 rounded"
+                style={viewPlayer === 'selecao' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                Quem está online
               </button>
             </div>
           )}
@@ -64,9 +69,11 @@ export default function App() {
           ? <MapaInterativo />
           : viewPlayer === 'combate'
             ? <PainelCombate editavel={false} />
-            : (meuPersonagem
-                ? <FichaJogador personagemId={meuPersonagem} />
-                : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
+            : viewPlayer === 'selecao'
+              ? <SelecaoJogadores />
+              : (meuPersonagem
+                  ? <FichaJogador personagemId={meuPersonagem} />
+                  : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
 
       <ImageOverlay />
       <ShadowOverlay />

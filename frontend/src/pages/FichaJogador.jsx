@@ -80,9 +80,12 @@ export default function FichaJogador({ personagemId }) {
 
 function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
   const inputRef = useRef(null);
+  const inputCorpoRef = useRef(null);
   const inputPdfRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
+  const [enviandoCorpo, setEnviandoCorpo] = useState(false);
   const [importando, setImportando] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [msgImport, setMsgImport] = useState('');
 
   async function importarPdf(e) {
@@ -105,6 +108,24 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
     }
   }
 
+  async function exportarPdf() {
+    setExportando(true);
+    try {
+      const resp = await api.get(`/personagens/${personagemId}/exportar-pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(ficha.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setMsgImport('Não foi possível gerar o PDF agora.');
+      setTimeout(() => setMsgImport(''), 6000);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   async function trocarAvatar(e) {
     const arquivo = e.target.files[0];
     if (!arquivo) return;
@@ -118,6 +139,23 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
       alert('Não foi possível enviar o avatar. Tente uma imagem menor.');
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function trocarFotoCorpo(e) {
+    const arquivo = e.target.files[0];
+    if (!arquivo) return;
+    setEnviandoCorpo(true);
+    try {
+      const form = new FormData();
+      form.append('foto', arquivo);
+      const { data } = await api.post(`/personagens/${personagemId}/foto-corpo`, form);
+      setFicha(data);
+    } catch {
+      alert('Não foi possível enviar a foto. Tente uma imagem menor.');
+    } finally {
+      setEnviandoCorpo(false);
+      e.target.value = '';
     }
   }
 
@@ -159,6 +197,15 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
             {importando ? '...' : '📥 Importar'}
           </button>
           <input ref={inputPdfRef} type="file" accept="application/pdf" hidden onChange={importarPdf} />
+          <button onClick={exportarPdf} title="Baixar a ficha em PDF (pode reimportar depois)"
+            className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--gold)', color: 'var(--gold)' }}>
+            {exportando ? '...' : '📤 Salvar PDF'}
+          </button>
+          <button onClick={() => inputCorpoRef.current?.click()} title="Foto de corpo inteiro (aparece em Quem está online)"
+            className="px-2 py-1 rounded text-xs flex-shrink-0" style={{ border: '1px solid var(--shadow)', color: '#c9a8ec' }}>
+            {enviandoCorpo ? '...' : '🧍 Foto de corpo'}
+          </button>
+          <input ref={inputCorpoRef} type="file" accept="image/*" hidden onChange={trocarFotoCorpo} />
         </div>
         {msgImport && <p className="text-[10px] mt-1" style={{ color: 'var(--gold)' }}>{msgImport}</p>}
       </div>

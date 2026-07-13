@@ -95,6 +95,13 @@ router.get('/personagens', async (req, res) => {
   res.json(todos.map(p => ocultarNotasSeNaoMestre(p, req.usuario)));
 });
 
+// lista básica (sem dados sensíveis) de todos os personagens, pra tela de "quem está online"
+// (precisa vir ANTES de /personagens/:id, senão o Express trata "publicos" como se fosse um :id)
+router.get('/personagens/publicos', async (req, res) => {
+  const { rows } = await pool.query('SELECT id, usuario_id, nome, foto_corpo_url FROM personagens');
+  res.json(rows);
+});
+
 router.get('/personagens/:id', async (req, res) => {
   const p = await personagemCompleto(req.params.id);
   if (!p) return res.status(404).json({ erro: 'Não encontrado' });
@@ -292,8 +299,30 @@ router.post('/personagens/:id/avatar', uploadMemoria.single('avatar'), async (re
   }
   await pool.query('UPDATE personagens SET foto_url = $1, atualizado_em = NOW() WHERE id = $2', [url, req.params.id]);
   const atualizado = await personagemCompleto(req.params.id);
-  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', atualizado);
-  res.json(atualizado);
+  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
+  res.json(ocultarNotasSeNaoMestre(atualizado, req.usuario));
+});
+
+router.post('/personagens/:id/foto-corpo', uploadMemoria.single('foto'), async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
+  const p = rows[0];
+  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
+  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
+    return res.status(403).json({ erro: 'Sem permissão' });
+  }
+  if (!req.file) return res.status(400).json({ erro: 'Envie uma imagem' });
+  let url;
+  try {
+    url = await enviarArquivo(req.file.buffer, req.file.originalname, req.file.mimetype);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ erro: 'Não foi possível enviar a imagem pro armazenamento.' });
+  }
+  await pool.query('UPDATE personagens SET foto_corpo_url = $1, atualizado_em = NOW() WHERE id = $2', [url, req.params.id]);
+  const atualizado = await personagemCompleto(req.params.id);
+  req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
+  req.io.emit('personagem-publico-atualizado', { id: atualizado.id, usuario_id: atualizado.usuario_id, nome: atualizado.nome, foto_corpo_url: atualizado.foto_corpo_url });
+  res.json(ocultarNotasSeNaoMestre(atualizado, req.usuario));
 });
 
 // ---------- INVOCAR A SOMBRA ----------
@@ -349,6 +378,91 @@ router.put('/minha-senha', async (req, res) => {
 });
 
 // ---------- IMPORTAR FICHA DE PDF PREENCHIDO ----------
+// ---------- EXPORTAR FICHA PREENCHIDA EM PDF (pode ser reimportada depois) ----------
+router.get('/personagens/:id/exportar-pdf', async (req, res) => {
+  const p = await personagemCompleto(req.params.id);
+  if (!p) return res.status(404).json({ erro: 'Não encontrado' });
+  if (req.usuario.papel !== 'mestre' && p.usuario_id !== req.usuario.id) {
+    return res.status(403).json({ erro: 'Sem permissão' });
+  }
+
+  try {
+    const templateBytes = fs.readFileSync(path.join(__dirname, '..', 'assets', 'ficha-template.pdf'));
+    const pdfDoc = await PDFDocument.load(templateBytes);
+    const form = pdfDoc.getForm();
+
+    function set(nomeCampo, valor) {
+      if (valor === null || valor === undefined || valor === '') return;
+      try {
+        form.getTextField(nomeCampo).setText(String(valor));
+      } catch { /* campo não existe nessa versão do PDF ou não é de texto - ignora */ }
+    }
+
+    for (const [campoPdf, chaveFicha] of Object.entries(fieldMap.diretos)) set(campoPdf, p[chaveFicha]);
+    for (const [campoPdf, chaveAtributo] of Object.entries(fieldMap.atributos)) set(campoPdf, p.atributos?.[chaveAtributo] ?? 0);
+
+    const bonus = p.bonus_proficiencia ?? 2;
+    for (const [campoPdf, chaveAtributo] of Object.entries(fieldMap.protecoes)) {
+      const valorAtributo = p.atributos?.[chaveAtributo] ?? 0;
+      const treinado = !!p.protecoes?.[chaveAtributo];
+      set(campoPdf, 10 + valorAtributo + (treinado ? bonus : 0));
+    }
+
+    set(fieldMap.catarseCampo, `${p.catarse_atual ?? 0}/${p.catarse_total ?? 0}`);
+
+    for (const [abrev, nomeCompleto] of Object.entries(fieldMap.pericias)) {
+      const pericia = (p.pericias || []).find(x => (x.nome || '').toLowerCase() === nomeCompleto.toLowerCase());
+      if (pericia) {
+        set(`${abrev}Tot`, pericia.total ?? 0);
+        if (pericia.outros) set(`${abrev}Out`, pericia.outros);
+      }
+    }
+
+    (p.inventario || []).slice(0, fieldMap.itemSlots.length).forEach((item, i) => {
+      const slot = fieldMap.itemSlots[i];
+      set(slot.nome, item.nome);
+      set(slot.descritores, item.descritores);
+      set(slot.volume, item.volume);
+      set(slot.fragmentos, item.fragmentos_arcanos);
+      set(slot.descricao, item.observacoes);
+    });
+
+    (p.talentos || []).slice(0, fieldMap.gruposHabilidade.length).forEach((t, i) => {
+      const grupo = fieldMap.gruposHabilidade[i];
+      set(grupo.campoNome, t.nome);
+      const detalhes = [
+        t.trilha && `Trilha: ${t.trilha}`,
+        t.execucao,
+        t.custo && `Custo: ${t.custo}`,
+        t.alcance && `Alcance: ${t.alcance}`,
+        t.alvo && `Alvo: ${t.alvo}`,
+        t.duracao && `Duração: ${t.duracao}`,
+        t.ataque && `Ataque: ${t.ataque}`,
+        t.descritores && `Descritores: ${t.descritores}`,
+        t.acerto && `Acerto: ${t.acerto}`,
+        t.erro && `Erro: ${t.erro}`,
+        t.efeito && `Efeito: ${t.efeito}`,
+        t.especial && `Especial: ${t.especial}`,
+        t.descricao,
+      ].filter(Boolean);
+      grupo.extras.forEach((campoExtra, idx) => { if (detalhes[idx]) set(campoExtra, detalhes[idx]); });
+      if (grupo.extras.length > 0 && detalhes.length > grupo.extras.length) {
+        const ultimo = grupo.extras[grupo.extras.length - 1];
+        set(ultimo, detalhes.slice(grupo.extras.length - 1).join(' | '));
+      }
+    });
+
+    form.updateFieldAppearances();
+    const bytes = await pdfDoc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${(p.nome || 'ficha').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
+    res.send(Buffer.from(bytes));
+  } catch (err) {
+    console.error('Erro ao exportar PDF:', err);
+    res.status(500).json({ erro: 'Não foi possível gerar o PDF da ficha.' });
+  }
+});
+
 router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
   const p = rows[0];

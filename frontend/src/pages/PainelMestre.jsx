@@ -3,6 +3,7 @@ import { api, conectarSocket } from '../api';
 import FichaJogador from './FichaJogador';
 import MapaInterativo from './MapaInterativo';
 import PainelCombate from './PainelCombate';
+import SelecaoJogadores from './SelecaoJogadores';
 import UsuariosOnline from '../components/UsuariosOnline';
 
 export default function PainelMestre() {
@@ -52,6 +53,10 @@ export default function PainelMestre() {
             style={abaLateral === 'combate' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Combate
           </button>
+          <button onClick={() => setAbaLateral('selecao')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'selecao' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Online
+          </button>
         </div>
 
         {abaLateral === 'fichas' && (
@@ -76,9 +81,11 @@ export default function PainelMestre() {
           ? <MapaInterativo />
           : abaLateral === 'combate'
             ? <PainelCombate editavel={true} />
-            : (selecionado
-                ? <FichaJogador personagemId={selecionado} />
-                : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
+            : abaLateral === 'selecao'
+              ? <SelecaoJogadores />
+              : (selecionado
+                  ? <FichaJogador personagemId={selecionado} />
+                  : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
       </main>
     </div>
   );
