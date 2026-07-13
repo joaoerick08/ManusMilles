@@ -65,14 +65,14 @@ export default function FichaJogador({ personagemId }) {
       <div className="px-4 mt-4">
         {aba === 'ficha' && <AbaFicha ficha={ficha} atualizarLocal={atualizarLocal} personagemId={personagemId} recarregar={carregar} />}
         {aba === 'talentos' && (
-          <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos} recarregar={carregar}
+          <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos || []} recarregar={carregar}
             filtro={t => t.tipo !== 'Magia'} tipoPadrao="Habilidade" tituloAdicionar="nova habilidade/talento" />
         )}
         {aba === 'magias' && (
-          <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos} recarregar={carregar}
+          <AbaHabilidades personagemId={personagemId} talentos={ficha.talentos || []} recarregar={carregar}
             filtro={t => t.tipo === 'Magia'} tipoPadrao="Magia" tituloAdicionar="nova magia" />
         )}
-        {aba === 'inventario' && <AbaInventario personagemId={personagemId} itens={ficha.inventario} recarregar={carregar} />}
+        {aba === 'inventario' && <AbaInventario personagemId={personagemId} itens={ficha.inventario || []} recarregar={carregar} />}
       </div>
     </div>
   );
@@ -724,13 +724,16 @@ function CardTalento({ t, remover, salvar, moverCima, moverBaixo, primeiro, ulti
 
         {t.descricao && !descOculta && <p className="italic" style={{ color: 'var(--text-dim)' }}>{t.descricao}</p>}
 
-        <div className="flex gap-3 pt-1">
+        <div className="flex gap-3 pt-1 flex-wrap">
           {t.descricao && (
             <button onClick={() => setDescOculta(!descOculta)} className="text-xs" style={{ color: 'var(--text-dim)' }}>
               {descOculta ? 'mostrar descrição' : 'ocultar descrição'}
             </button>
           )}
           <button onClick={() => setEditando(true)} className="text-xs" style={{ color: 'var(--gold)' }}>editar</button>
+          <button onClick={() => salvar({ tipo: t.tipo === 'Magia' ? 'Habilidade' : 'Magia' })} className="text-xs" style={{ color: '#c9a8ec' }}>
+            {t.tipo === 'Magia' ? '↪ mover pra Habilidades' : '↪ mover pra Magias'}
+          </button>
           <button onClick={remover} className="text-xs" style={{ color: 'var(--danger)' }}>remover</button>
         </div>
       </div>

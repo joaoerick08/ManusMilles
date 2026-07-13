@@ -5,6 +5,7 @@ import MapaInterativo from './MapaInterativo';
 import PainelCombate from './PainelCombate';
 import SelecaoJogadores from './SelecaoJogadores';
 import UsuariosOnline from '../components/UsuariosOnline';
+import ProtecaoErro from '../components/ProtecaoErro';
 
 export default function PainelMestre() {
   const [personagens, setPersonagens] = useState([]);
@@ -84,7 +85,7 @@ export default function PainelMestre() {
             : abaLateral === 'selecao'
               ? <SelecaoJogadores />
               : (selecionado
-                  ? <FichaJogador personagemId={selecionado} />
+                  ? <ProtecaoErro><FichaJogador personagemId={selecionado} /></ProtecaoErro>
                   : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
       </main>
     </div>

@@ -11,6 +11,7 @@ import ShadowOverlay from './components/ShadowOverlay';
 import TrocarSenha from './components/TrocarSenha';
 import DiceRoller from './components/DiceRoller';
 import MaxuelGame from './components/MaxuelGame';
+import ProtecaoErro from './components/ProtecaoErro';
 
 export default function App() {
   const [usuario, setUsuario] = useState(getUsuario());
@@ -64,15 +65,15 @@ export default function App() {
       </header>
 
       {usuario.papel === 'mestre'
-        ? <PainelMestre />
+        ? <ProtecaoErro><PainelMestre /></ProtecaoErro>
         : viewPlayer === 'mapa'
-          ? <MapaInterativo />
+          ? <ProtecaoErro><MapaInterativo /></ProtecaoErro>
           : viewPlayer === 'combate'
-            ? <PainelCombate editavel={false} />
+            ? <ProtecaoErro><PainelCombate editavel={false} /></ProtecaoErro>
             : viewPlayer === 'selecao'
-              ? <SelecaoJogadores />
+              ? <ProtecaoErro><SelecaoJogadores /></ProtecaoErro>
               : (meuPersonagem
-                  ? <FichaJogador personagemId={meuPersonagem} />
+                  ? <ProtecaoErro><FichaJogador personagemId={meuPersonagem} /></ProtecaoErro>
                   : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
 
       <ImageOverlay />
