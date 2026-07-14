@@ -510,6 +510,10 @@ function LinhaPericia({ item, salvar, remover, rolar }) {
   const [valores, setValores] = useState(item);
   const salvarTimeout = useRef(null);
 
+  useEffect(() => {
+    if (!salvarTimeout.current) setValores(item);
+  }, [item]);
+
   function mudar(campos) {
     const novo = { ...valores, ...campos };
     setValores(novo);
@@ -668,6 +672,11 @@ function CardTalento({ t, remover, salvar, moverCima, moverBaixo, primeiro, ulti
   const [editando, setEditando] = useState(false);
   const [valores, setValores] = useState(t);
   const [descOculta, setDescOculta] = useState(false);
+
+  useEffect(() => {
+    if (!editando) setValores(t);
+  }, [t, editando]);
+
   const tags = (t.descritores || '').split(',').map(s => s.trim()).filter(Boolean);
 
   if (editando) {
@@ -808,6 +817,10 @@ function AbaHabilidades({ personagemId, talentos, recarregar, filtro, tipoPadrao
 function ItemInventario({ item, salvar, remover }) {
   const [editando, setEditando] = useState(false);
   const [valores, setValores] = useState(item);
+
+  useEffect(() => {
+    if (!editando) setValores(item);
+  }, [item, editando]);
 
   if (editando) {
     return (

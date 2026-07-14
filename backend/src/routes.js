@@ -154,7 +154,20 @@ async function emitirFicha(req, personagemId) {
   if (atualizado) req.io.to(`personagem-${personagemId}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
 }
 
+// Confere se quem está fazendo a requisição é o mestre ou o dono desse personagem.
+// Use sempre antes de criar/editar/apagar talentos, perícias ou itens de inventário.
+async function podeEditarPersonagem(req, personagemId) {
+  if (req.usuario.papel === 'mestre') return { ok: true };
+  const { rows } = await pool.query('SELECT usuario_id FROM personagens WHERE id = $1', [personagemId]);
+  const p = rows[0];
+  if (!p) return { ok: false, status: 404, erro: 'Personagem não encontrado' };
+  if (p.usuario_id !== req.usuario.id) return { ok: false, status: 403, erro: 'Sem permissão' };
+  return { ok: true };
+}
+
 router.post('/personagens/:id/talentos', async (req, res) => {
+  const permissao = await podeEditarPersonagem(req, req.params.id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   if (!('ordem' in req.body)) {
     const { rows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM talentos WHERE personagem_id = $1', [req.params.id]);
     req.body.ordem = rows[0].m + 1;
@@ -172,6 +185,9 @@ router.post('/personagens/:id/talentos', async (req, res) => {
 router.put('/talentos/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM talentos WHERE id = $1', [req.params.id]);
   const talento = rows[0];
+  if (!talento) return res.status(404).json({ erro: 'Não encontrado' });
+  const permissao = await podeEditarPersonagem(req, talento.personagem_id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   const sets = []; const valores = [];
   let i = 1;
   for (const c of CAMPOS_TALENTO) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(req.body[c]); }
@@ -186,6 +202,9 @@ router.put('/talentos/:id', async (req, res) => {
 router.delete('/talentos/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM talentos WHERE id = $1', [req.params.id]);
   const talento = rows[0];
+  if (!talento) return res.status(404).json({ erro: 'Não encontrado' });
+  const permissao = await podeEditarPersonagem(req, talento.personagem_id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   await pool.query('DELETE FROM talentos WHERE id = $1', [req.params.id]);
   if (talento) await emitirFicha(req, talento.personagem_id);
   res.json({ ok: true });
@@ -193,6 +212,8 @@ router.delete('/talentos/:id', async (req, res) => {
 
 // ---------- PERÍCIAS (cada uma salva separada, evita conflito quando duas pessoas editam ao mesmo tempo) ----------
 router.post('/personagens/:id/pericias', async (req, res) => {
+  const permissao = await podeEditarPersonagem(req, req.params.id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   const { nome, proficiente, total, outros } = req.body;
   if (!('ordem' in req.body)) {
     const { rows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
@@ -209,6 +230,9 @@ router.post('/personagens/:id/pericias', async (req, res) => {
 router.put('/pericias/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM pericias_personagem WHERE id = $1', [req.params.id]);
   const pericia = rows[0];
+  if (!pericia) return res.status(404).json({ erro: 'Não encontrado' });
+  const permissao = await podeEditarPersonagem(req, pericia.personagem_id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   const CAMPOS_PERICIA = ['nome', 'proficiente', 'total', 'outros', 'ordem'];
   const sets = []; const valores = [];
   let i = 1;
@@ -224,6 +248,9 @@ router.put('/pericias/:id', async (req, res) => {
 router.delete('/pericias/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM pericias_personagem WHERE id = $1', [req.params.id]);
   const pericia = rows[0];
+  if (!pericia) return res.status(404).json({ erro: 'Não encontrado' });
+  const permissao = await podeEditarPersonagem(req, pericia.personagem_id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   await pool.query('DELETE FROM pericias_personagem WHERE id = $1', [req.params.id]);
   if (pericia) await emitirFicha(req, pericia.personagem_id);
   res.json({ ok: true });
@@ -231,6 +258,8 @@ router.delete('/pericias/:id', async (req, res) => {
 
 // adiciona as perícias oficiais que ainda faltarem pra esse personagem (não duplica as já existentes)
 router.post('/personagens/:id/pericias/carregar-padrao', async (req, res) => {
+  const permissao = await podeEditarPersonagem(req, req.params.id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   const { rows: existentes } = await pool.query('SELECT nome FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
   const nomesExistentes = existentes.map(p => p.nome.toLowerCase());
   const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
@@ -248,6 +277,8 @@ router.post('/personagens/:id/pericias/carregar-padrao', async (req, res) => {
 
 // ---------- INVENTÁRIO ----------
 router.post('/personagens/:id/inventario', async (req, res) => {
+  const permissao = await podeEditarPersonagem(req, req.params.id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   const { nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO inventario (personagem_id, nome, descritores, volume, fragmentos_arcanos, quantidade, observacoes)
@@ -261,6 +292,9 @@ router.post('/personagens/:id/inventario', async (req, res) => {
 router.put('/inventario/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM inventario WHERE id = $1', [req.params.id]);
   const item = rows[0];
+  if (!item) return res.status(404).json({ erro: 'Não encontrado' });
+  const permissao = await podeEditarPersonagem(req, item.personagem_id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   const campos = ['nome','descritores','volume','fragmentos_arcanos','quantidade','observacoes'];
   const sets = []; const valores = [];
   let i = 1;
@@ -276,6 +310,9 @@ router.put('/inventario/:id', async (req, res) => {
 router.delete('/inventario/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM inventario WHERE id = $1', [req.params.id]);
   const item = rows[0];
+  if (!item) return res.status(404).json({ erro: 'Não encontrado' });
+  const permissao = await podeEditarPersonagem(req, item.personagem_id);
+  if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
   await pool.query('DELETE FROM inventario WHERE id = $1', [req.params.id]);
   if (item) await emitirFicha(req, item.personagem_id);
   res.json({ ok: true });
