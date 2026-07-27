@@ -4,6 +4,7 @@ import FichaJogador from './FichaJogador';
 import MapaInterativo from './MapaInterativo';
 import PainelCombate from './PainelCombate';
 import SelecaoJogadores from './SelecaoJogadores';
+import Galeria from './Galeria';
 import UsuariosOnline from '../components/UsuariosOnline';
 import ProtecaoErro from '../components/ProtecaoErro';
 
@@ -58,6 +59,10 @@ export default function PainelMestre() {
             style={abaLateral === 'selecao' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Online
           </button>
+          <button onClick={() => setAbaLateral('galeria')} className="flex-1 py-1.5 rounded text-xs"
+            style={abaLateral === 'galeria' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+            Galeria
+          </button>
         </div>
 
         {abaLateral === 'fichas' && (
@@ -84,9 +89,11 @@ export default function PainelMestre() {
             ? <PainelCombate editavel={true} />
             : abaLateral === 'selecao'
               ? <SelecaoJogadores />
-              : (selecionado
-                  ? <ProtecaoErro><FichaJogador personagemId={selecionado} /></ProtecaoErro>
-                  : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
+              : abaLateral === 'galeria'
+                ? <Galeria />
+                : (selecionado
+                    ? <ProtecaoErro><FichaJogador personagemId={selecionado} /></ProtecaoErro>
+                    : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Selecione uma ficha na barra lateral</p>)}
       </main>
     </div>
   );

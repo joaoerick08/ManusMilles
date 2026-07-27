@@ -848,13 +848,20 @@ function ItemInventario({ item, salvar, remover }) {
   }
 
   return (
-    <div className="flex items-center justify-between text-sm p-2 rounded" style={{ background: 'var(--surface-2)' }}>
-      <div>
-        <p className="font-medium">{item.nome} {item.quantidade > 1 && `x${item.quantidade}`}</p>
-        {item.descritores && <p className="text-xs" style={{ color: 'var(--gold)' }}>{item.descritores}</p>}
-        {item.observacoes && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{item.observacoes}</p>}
+    <div className="flex items-center justify-between text-sm p-2 rounded gap-2" style={{ background: 'var(--surface-2)' }}>
+      <div className="flex items-center gap-2 min-w-0">
+        {item.imagem_url && (
+          <img src={item.imagem_url} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" style={{ border: '1px solid var(--gold)' }} />
+        )}
+        <div className="min-w-0">
+          <p className="font-medium truncate">{item.nome} {item.quantidade > 1 && `x${item.quantidade}`}</p>
+          {item.descritores && <p className="text-xs" style={{ color: 'var(--gold)' }}>{item.descritores}</p>}
+          {item.dano && <p className="text-xs" style={{ color: 'var(--gold)' }}>⚔️ {item.dano}</p>}
+          {item.resistencia && <p className="text-xs" style={{ color: 'var(--gold)' }}>🛡️ {item.resistencia}</p>}
+          {item.observacoes && <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{item.observacoes}</p>}
+        </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-shrink-0">
         <button onClick={() => setEditando(true)} className="text-xs" style={{ color: 'var(--gold)' }}>editar</button>
         <button onClick={remover} style={{ color: 'var(--danger)' }}>✕</button>
       </div>
@@ -862,7 +869,82 @@ function ItemInventario({ item, salvar, remover }) {
   );
 }
 
+function DarItem({ personagemId, recarregar }) {
+  const [nome, setNome] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [tipo, setTipo] = useState('equipamento');
+  const [dano, setDano] = useState('');
+  const [resistencia, setResistencia] = useState('');
+  const [quantidade, setQuantidade] = useState(1);
+  const [imagem, setImagem] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  async function darItem() {
+    if (!nome) { setMsg('Dá um nome pro item'); return; }
+    setEnviando(true);
+    setMsg('');
+    try {
+      const form = new FormData();
+      form.append('nome', nome);
+      form.append('descricao', descricao);
+      form.append('tipo', tipo);
+      form.append('dano', dano);
+      form.append('resistencia', resistencia);
+      form.append('quantidade', quantidade);
+      if (imagem) form.append('imagem', imagem);
+      await api.post(`/personagens/${personagemId}/dar-item`, form);
+      setNome(''); setDescricao(''); setDano(''); setResistencia(''); setImagem(null); setQuantidade(1);
+      setMsg('Item entregue!');
+      recarregar();
+    } catch (err) {
+      setMsg(err.response?.data?.erro || 'Não foi possível dar o item.');
+    } finally {
+      setEnviando(false);
+      setTimeout(() => setMsg(''), 4000);
+    }
+  }
+
+  return (
+    <Secao titulo="🎁 Dar item (com efeito na tela do player)">
+      <div className="space-y-2">
+        <input placeholder="Nome do item" value={nome} onChange={e => setNome(e.target.value)}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <div className="grid grid-cols-2 gap-2">
+          <select value={tipo} onChange={e => setTipo(e.target.value)}
+            className="px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+            <option value="equipamento">Equipamento (arma)</option>
+            <option value="armadura">Armadura</option>
+            <option value="outro">Outro</option>
+          </select>
+          <input type="number" min="1" placeholder="Quantidade" value={quantidade} onChange={e => setQuantidade(Number(e.target.value))}
+            className="px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        </div>
+        {tipo === 'equipamento' && (
+          <input placeholder="Dano (ex: 2d6 cortante)" value={dano} onChange={e => setDano(e.target.value)}
+            className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        )}
+        {tipo === 'armadura' && (
+          <input placeholder="Resistência (ex: +3 na proteção)" value={resistencia} onChange={e => setResistencia(e.target.value)}
+            className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        )}
+        <textarea placeholder="Descrição do item" value={descricao} onChange={e => setDescricao(e.target.value)} rows={2}
+          className="w-full px-2 py-1.5 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--text-dim)' }}>Imagem do item (opcional)</label>
+          <input type="file" accept="image/*" onChange={e => setImagem(e.target.files[0])} className="w-full text-xs" style={{ color: 'var(--text-dim)' }} />
+        </div>
+        <button onClick={darItem} disabled={enviando} className="w-full py-2 rounded text-sm font-medium" style={{ background: 'var(--shadow)', color: '#fff' }}>
+          {enviando ? 'Entregando...' : '🎁 Dar item ao player'}
+        </button>
+        {msg && <p className="text-xs" style={{ color: 'var(--gold)' }}>{msg}</p>}
+      </div>
+    </Secao>
+  );
+}
+
 function AbaInventario({ personagemId, itens, recarregar }) {
+  const usuario = getUsuario();
   const [novo, setNovo] = useState({ nome: '', descritores: '', volume: 0, fragmentos_arcanos: 0, quantidade: 1, observacoes: '' });
 
   async function adicionar() {
@@ -913,6 +995,8 @@ function AbaInventario({ personagemId, itens, recarregar }) {
           </button>
         </div>
       </Secao>
+
+      {usuario.papel === 'mestre' && <DarItem personagemId={personagemId} recarregar={recarregar} />}
     </>
   );
 }

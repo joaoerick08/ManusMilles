@@ -289,13 +289,50 @@ router.post('/personagens/:id/inventario', async (req, res) => {
   res.json({ id: rows[0].id });
 });
 
+// mestre dá um item "de verdade" pro player, com imagem e efeito de "item conseguido" na tela dele
+router.post('/personagens/:id/dar-item', apenasMestre, uploadMemoria.single('imagem'), async (req, res) => {
+  const { nome, descricao, tipo, dano, resistencia, quantidade } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Dá um nome pro item' });
+
+  let imagemUrl = null;
+  if (req.file) {
+    try {
+      imagemUrl = await enviarArquivo(req.file.buffer, req.file.originalname, req.file.mimetype);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ erro: 'Não foi possível enviar a imagem do item.' });
+    }
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO inventario (personagem_id, nome, observacoes, tipo, dano, resistencia, imagem_url, quantidade)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [req.params.id, nome, descricao || null, tipo || null, dano || null, resistencia || null, imagemUrl, quantidade || 1]
+  );
+
+  const personagem = await pool.query('SELECT nome FROM personagens WHERE id = $1', [req.params.id]);
+  const item = rows[0];
+
+  await emitirFicha(req, req.params.id);
+  req.io.to(`personagem-${req.params.id}`).emit('item-ganho', {
+    personagemNome: personagem.rows[0]?.nome || '',
+    nome: item.nome,
+    imagem_url: item.imagem_url,
+    tipo: item.tipo,
+    dano: item.dano,
+    resistencia: item.resistencia,
+  });
+
+  res.json({ ok: true, item });
+});
+
 router.put('/inventario/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT personagem_id FROM inventario WHERE id = $1', [req.params.id]);
   const item = rows[0];
   if (!item) return res.status(404).json({ erro: 'Não encontrado' });
   const permissao = await podeEditarPersonagem(req, item.personagem_id);
   if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
-  const campos = ['nome','descritores','volume','fragmentos_arcanos','quantidade','observacoes'];
+  const campos = ['nome','descritores','volume','fragmentos_arcanos','quantidade','observacoes','dano','resistencia','imagem_url','tipo'];
   const sets = []; const valores = [];
   let i = 1;
   for (const c of campos) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(req.body[c]); }
@@ -386,13 +423,31 @@ router.post('/broadcast', apenasMestre, uploadMemoria.single('imagem'), async (r
   } else {
     return res.status(400).json({ erro: 'Envie uma imagem ou uma url' });
   }
-  await pool.query('INSERT INTO broadcasts (url, destino) VALUES ($1, $2)', [url, destino]);
+  const { rows: inseridos } = await pool.query('INSERT INTO broadcasts (url, destino) VALUES ($1, $2) RETURNING *', [url, destino]);
+  const registro = inseridos[0];
   if (destino === 'todos') {
     req.io.emit('mostrar-imagem', { url });
+    req.io.emit('galeria-novo-item', registro);
   } else {
     req.io.to(`usuario-${destino}`).emit('mostrar-imagem', { url });
+    req.io.to(`usuario-${destino}`).emit('galeria-novo-item', registro);
+    req.io.to(`usuario-${req.usuario.id}`).emit('galeria-novo-item', registro);
   }
   res.json({ ok: true, url });
+});
+
+// histórico de tudo que já foi mostrado (galeria) — mestre vê tudo, player só o que era pra "todos" ou pra ele
+router.get('/broadcasts', async (req, res) => {
+  let rows;
+  if (req.usuario.papel === 'mestre') {
+    ({ rows } = await pool.query('SELECT * FROM broadcasts ORDER BY criado_em DESC LIMIT 300'));
+  } else {
+    ({ rows } = await pool.query(
+      "SELECT * FROM broadcasts WHERE destino = 'todos' OR destino = $1 ORDER BY criado_em DESC LIMIT 300",
+      [String(req.usuario.id)]
+    ));
+  }
+  res.json(rows);
 });
 
 router.post('/broadcast/limpar', apenasMestre, (req, res) => {

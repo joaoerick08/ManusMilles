@@ -46,3 +46,12 @@ export function tocarSomFalha() {
   tocarTom(160, 0.3, 'sawtooth', 0.13, 0.12);
   tocarTom(100, 0.35, 'sawtooth', 0.1, 0.24);
 }
+
+// fanfarra de "item conseguido" - uma escalinha alegre terminando num acorde
+export function tocarSomItem() {
+  tocarTom(392, 0.12, 'triangle', 0.16, 0);
+  tocarTom(523, 0.12, 'triangle', 0.16, 0.1);
+  tocarTom(659, 0.12, 'triangle', 0.16, 0.2);
+  tocarTom(784, 0.35, 'triangle', 0.2, 0.3);
+  tocarTom(988, 0.4, 'triangle', 0.15, 0.32);
+}

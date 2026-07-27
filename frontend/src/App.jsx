@@ -6,12 +6,14 @@ import PainelMestre from './pages/PainelMestre';
 import MapaInterativo from './pages/MapaInterativo';
 import PainelCombate from './pages/PainelCombate';
 import SelecaoJogadores from './pages/SelecaoJogadores';
+import Galeria from './pages/Galeria';
 import ImageOverlay from './components/ImageOverlay';
 import ShadowOverlay from './components/ShadowOverlay';
 import TrocarSenha from './components/TrocarSenha';
 import DiceRoller from './components/DiceRoller';
 import MaxuelGame from './components/MaxuelGame';
 import ProtecaoErro from './components/ProtecaoErro';
+import ItemGanhoOverlay from './components/ItemGanhoOverlay';
 
 export default function App() {
   const [usuario, setUsuario] = useState(getUsuario());
@@ -50,6 +52,10 @@ export default function App() {
                 style={viewPlayer === 'selecao' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
                 Quem está online
               </button>
+              <button onClick={() => setViewPlayer('galeria')} className="text-xs px-2 py-1 rounded"
+                style={viewPlayer === 'galeria' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                Galeria
+              </button>
             </div>
           )}
           <span className="text-sm" style={{ color: 'var(--text-dim)' }}>{usuario.nome}</span>
@@ -72,14 +78,17 @@ export default function App() {
             ? <ProtecaoErro><PainelCombate editavel={false} /></ProtecaoErro>
             : viewPlayer === 'selecao'
               ? <ProtecaoErro><SelecaoJogadores /></ProtecaoErro>
-              : (meuPersonagem
-                  ? <ProtecaoErro><FichaJogador personagemId={meuPersonagem} /></ProtecaoErro>
-                  : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
+              : viewPlayer === 'galeria'
+                ? <ProtecaoErro><Galeria /></ProtecaoErro>
+                : (meuPersonagem
+                    ? <ProtecaoErro><FichaJogador personagemId={meuPersonagem} /></ProtecaoErro>
+                    : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
 
       <ImageOverlay />
       <ShadowOverlay />
       <DiceRoller />
       <MaxuelGame />
+      <ItemGanhoOverlay />
       {trocandoSenha && <TrocarSenha aoFechar={() => setTrocandoSenha(false)} />}
     </div>
   );

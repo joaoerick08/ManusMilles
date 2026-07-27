@@ -52,9 +52,20 @@ function listaOnline() {
   return lista;
 }
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   socket.join(`usuario-${socket.usuario.id}`);
   socket.on('entrar-ficha', (personagemId) => socket.join(`personagem-${personagemId}`));
+
+  // entra automaticamente na sala da própria ficha, pra sempre receber itens/atualizações
+  // mesmo que o app ainda não tenha aberto a aba de ficha nessa sessão
+  if (socket.usuario.papel === 'player') {
+    try {
+      const { rows } = await pool.query('SELECT id FROM personagens WHERE usuario_id = $1', [socket.usuario.id]);
+      if (rows[0]) socket.join(`personagem-${rows[0].id}`);
+    } catch (err) {
+      console.error('Erro ao entrar automaticamente na sala da ficha:', err);
+    }
+  }
 
   usuariosOnline.set(socket.id, { id: socket.usuario.id, nome: socket.usuario.nome, papel: socket.usuario.papel });
   io.emit('usuarios-online', listaOnline());
