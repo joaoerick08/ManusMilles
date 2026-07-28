@@ -7,7 +7,7 @@ const { pool } = require('./db');
 const { autenticar, apenasMestre } = require('./auth');
 const { PDFDocument } = require('pdf-lib');
 const fieldMap = require('./pdfFieldMap.json');
-const { enviarArquivo } = require('./storage');
+const { enviarArquivo, removerArquivo } = require('./storage');
 
 const router = express.Router();
 
@@ -345,11 +345,12 @@ router.put('/inventario/:id', async (req, res) => {
 });
 
 router.delete('/inventario/:id', async (req, res) => {
-  const { rows } = await pool.query('SELECT personagem_id FROM inventario WHERE id = $1', [req.params.id]);
+  const { rows } = await pool.query('SELECT personagem_id, imagem_url FROM inventario WHERE id = $1', [req.params.id]);
   const item = rows[0];
   if (!item) return res.status(404).json({ erro: 'Não encontrado' });
   const permissao = await podeEditarPersonagem(req, item.personagem_id);
   if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
+  if (item.imagem_url) removerArquivo(item.imagem_url).catch(err => console.error('Erro ao apagar imagem do item:', err));
   await pool.query('DELETE FROM inventario WHERE id = $1', [req.params.id]);
   if (item) await emitirFicha(req, item.personagem_id);
   res.json({ ok: true });
@@ -372,6 +373,7 @@ router.post('/personagens/:id/avatar', uploadMemoria.single('avatar'), async (re
     return res.status(500).json({ erro: 'Não foi possível enviar a imagem pro armazenamento.' });
   }
   await pool.query('UPDATE personagens SET foto_url = $1, atualizado_em = NOW() WHERE id = $2', [url, req.params.id]);
+  if (p.foto_url) removerArquivo(p.foto_url).catch(err => console.error('Erro ao apagar avatar antigo:', err));
   const atualizado = await personagemCompleto(req.params.id);
   req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
   res.json(ocultarNotasSeNaoMestre(atualizado, req.usuario));
@@ -393,6 +395,7 @@ router.post('/personagens/:id/foto-corpo', uploadMemoria.single('foto'), async (
     return res.status(500).json({ erro: 'Não foi possível enviar a imagem pro armazenamento.' });
   }
   await pool.query('UPDATE personagens SET foto_corpo_url = $1, atualizado_em = NOW() WHERE id = $2', [url, req.params.id]);
+  if (p.foto_corpo_url) removerArquivo(p.foto_corpo_url).catch(err => console.error('Erro ao apagar foto de corpo antiga:', err));
   const atualizado = await personagemCompleto(req.params.id);
   req.io.to(`personagem-${req.params.id}`).emit('ficha-atualizada', ocultarNotasSeNaoMestre(atualizado, { papel: 'player' }));
   req.io.emit('personagem-publico-atualizado', { id: atualizado.id, usuario_id: atualizado.usuario_id, nome: atualizado.nome, foto_corpo_url: atualizado.foto_corpo_url });
@@ -448,6 +451,17 @@ router.get('/broadcasts', async (req, res) => {
     ));
   }
   res.json(rows);
+});
+
+// mestre apaga uma imagem/vídeo da galeria de vez (some do banco e do armazenamento, não acumula espaço)
+router.delete('/broadcasts/:id', apenasMestre, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM broadcasts WHERE id = $1', [req.params.id]);
+  const item = rows[0];
+  if (!item) return res.status(404).json({ erro: 'Não encontrado' });
+  await removerArquivo(item.url);
+  await pool.query('DELETE FROM broadcasts WHERE id = $1', [req.params.id]);
+  req.io.emit('galeria-item-removido', { id: item.id });
+  res.json({ ok: true });
 });
 
 router.post('/broadcast/limpar', apenasMestre, (req, res) => {
@@ -774,6 +788,8 @@ router.put('/mapas/:id/ativar', apenasMestre, async (req, res) => {
 });
 
 router.delete('/mapas/:id', apenasMestre, async (req, res) => {
+  const { rows } = await pool.query('SELECT url FROM mapas WHERE id = $1', [req.params.id]);
+  if (rows[0]) removerArquivo(rows[0].url).catch(err => console.error('Erro ao apagar imagem do mapa:', err));
   await pool.query('DELETE FROM mapas WHERE id = $1', [req.params.id]);
   res.json({ ok: true });
 });

@@ -33,4 +33,15 @@ async function enviarArquivo(buffer, nomeOriginal, mimetype) {
   return data.publicUrl;
 }
 
-module.exports = { garantirBucket, enviarArquivo };
+// apaga o arquivo do armazenamento a partir da URL pública (pra não ficar acumulando espaço à toa)
+async function removerArquivo(url) {
+  if (!supabase || !url) return;
+  const marcador = `/public/${BUCKET}/`;
+  const indice = url.indexOf(marcador);
+  if (indice === -1) return;
+  const nomeArquivo = decodeURIComponent(url.slice(indice + marcador.length));
+  const { error } = await supabase.storage.from(BUCKET).remove([nomeArquivo]);
+  if (error) console.error('Erro ao remover arquivo do armazenamento:', error.message);
+}
+
+module.exports = { garantirBucket, enviarArquivo, removerArquivo };
