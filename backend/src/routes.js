@@ -477,9 +477,13 @@ router.put('/minha-senha', async (req, res) => {
   if (!senha_atual || !senha_nova) return res.status(400).json({ erro: 'Preencha a senha atual e a nova' });
   const { rows } = await pool.query('SELECT * FROM usuarios WHERE id = $1', [req.usuario.id]);
   const usuario = rows[0];
-  if (!bcrypt.compareSync(senha_atual, usuario.senha_hash)) return res.status(401).json({ erro: 'Senha atual incorreta' });
+  if (!bcrypt.compareSync(senha_atual, usuario.senha_hash)) {
+    console.log(`[senha] tentativa falhou (senha atual incorreta) - usuario ${usuario.login} (id ${usuario.id}) em ${new Date().toISOString()}`);
+    return res.status(401).json({ erro: 'Senha atual incorreta' });
+  }
   const hash = bcrypt.hashSync(senha_nova, 10);
-  await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE id = $2', [hash, req.usuario.id]);
+  const resultado = await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE id = $2', [hash, req.usuario.id]);
+  console.log(`[senha] trocada com sucesso - usuario ${usuario.login} (id ${usuario.id}) - linhas afetadas: ${resultado.rowCount} - em ${new Date().toISOString()}`);
   res.json({ ok: true });
 });
 
@@ -749,6 +753,39 @@ router.post('/personagens/:id/importar-pdf', uploadPdfMemoria.single('pdf'), asy
   }
 });
 
+
+// ---------- FUNDO DO SITE (ambientação) ----------
+router.get('/config/fundo', async (req, res) => {
+  const { rows } = await pool.query("SELECT valor FROM config WHERE chave = 'fundo_url'");
+  res.json({ url: rows[0]?.valor || null });
+});
+
+router.post('/config/fundo', apenasMestre, uploadMemoria.single('imagem'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ erro: 'Envie uma imagem' });
+  let url;
+  try {
+    url = await enviarArquivo(req.file.buffer, req.file.originalname, req.file.mimetype);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ erro: 'Não foi possível enviar a imagem pro armazenamento.' });
+  }
+  const { rows: antigo } = await pool.query("SELECT valor FROM config WHERE chave = 'fundo_url'");
+  await pool.query(
+    "INSERT INTO config (chave, valor) VALUES ('fundo_url', $1) ON CONFLICT (chave) DO UPDATE SET valor = $1",
+    [url]
+  );
+  if (antigo[0]?.valor) removerArquivo(antigo[0].valor).catch(err => console.error('Erro ao apagar fundo antigo:', err));
+  req.io.emit('fundo-atualizado', { url });
+  res.json({ ok: true, url });
+});
+
+router.delete('/config/fundo', apenasMestre, async (req, res) => {
+  const { rows: antigo } = await pool.query("SELECT valor FROM config WHERE chave = 'fundo_url'");
+  if (antigo[0]?.valor) removerArquivo(antigo[0].valor).catch(err => console.error('Erro ao apagar fundo antigo:', err));
+  await pool.query("DELETE FROM config WHERE chave = 'fundo_url'");
+  req.io.emit('fundo-atualizado', { url: null });
+  res.json({ ok: true });
+});
 
 // ---------- MAPAS INTERATIVOS ----------
 const CORES_PIN = ['#e0554f', '#4f9de0', '#4fe08a', '#e0c94f', '#b04fe0', '#e08a4f', '#4fd8e0', '#e04f9e'];

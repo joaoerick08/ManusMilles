@@ -288,6 +288,54 @@ function PainelTransmitir({ usuarios }) {
           Ele aparece pequeno em um lugar aleatório da tela. Quem clicar primeiro ganha a Catarse.
         </p>
       </div>
+
+      <PainelFundo />
+    </div>
+  );
+}
+
+function PainelFundo() {
+  const [arquivo, setArquivo] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  async function aplicar() {
+    if (!arquivo) { setMsg('Escolhe uma imagem primeiro'); return; }
+    setEnviando(true);
+    setMsg('');
+    try {
+      const form = new FormData();
+      form.append('imagem', arquivo);
+      await api.post('/config/fundo', form);
+      setArquivo(null);
+      setMsg('Fundo atualizado pra todo mundo!');
+    } catch (err) {
+      setMsg(err.response?.data?.erro || 'Erro ao trocar o fundo');
+    } finally {
+      setEnviando(false);
+      setTimeout(() => setMsg(''), 4000);
+    }
+  }
+
+  async function restaurar() {
+    await api.delete('/config/fundo');
+    setMsg('Fundo padrão restaurado.');
+    setTimeout(() => setMsg(''), 4000);
+  }
+
+  return (
+    <div className="pt-3 mt-3 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
+      <label className="text-xs block mb-1" style={{ color: 'var(--gold)' }}>🖼️ Fundo do site (ambientação)</label>
+      <input type="file" accept="image/*" onChange={e => setArquivo(e.target.files[0])} className="w-full text-xs" style={{ color: 'var(--text-dim)' }} />
+      <div className="flex gap-2">
+        <button onClick={aplicar} disabled={enviando} className="flex-1 py-1.5 rounded text-sm font-medium" style={{ background: 'var(--gold)', color: '#120810' }}>
+          {enviando ? 'Enviando...' : 'Aplicar pra todos'}
+        </button>
+        <button onClick={restaurar} className="px-3 py-1.5 rounded text-sm" style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+          Restaurar padrão
+        </button>
+      </div>
+      {msg && <p className="text-xs" style={{ color: 'var(--gold)' }}>{msg}</p>}
     </div>
   );
 }

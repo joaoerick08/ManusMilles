@@ -14,6 +14,7 @@ import DiceRoller from './components/DiceRoller';
 import MaxuelGame from './components/MaxuelGame';
 import ProtecaoErro from './components/ProtecaoErro';
 import ItemGanhoOverlay from './components/ItemGanhoOverlay';
+import FundoAmbiente from './components/FundoAmbiente';
 
 export default function App() {
   const [usuario, setUsuario] = useState(getUsuario());
@@ -84,6 +85,7 @@ export default function App() {
                     ? <ProtecaoErro><FichaJogador personagemId={meuPersonagem} /></ProtecaoErro>
                     : <p className="text-center mt-10" style={{ color: 'var(--text-dim)' }}>Nenhuma ficha vinculada ainda. Fale com o mestre.</p>)}
 
+      <FundoAmbiente />
       <ImageOverlay />
       <ShadowOverlay />
       <DiceRoller />

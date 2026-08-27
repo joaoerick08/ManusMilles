@@ -125,6 +125,11 @@ async function iniciar() {
       criado_em TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS config (
+      chave TEXT PRIMARY KEY,
+      valor TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS mapa_pins (
       id SERIAL PRIMARY KEY,
       mapa_id INTEGER NOT NULL REFERENCES mapas(id) ON DELETE CASCADE,
