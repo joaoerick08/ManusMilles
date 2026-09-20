@@ -16,6 +16,14 @@ import ProtecaoErro from './components/ProtecaoErro';
 import ItemGanhoOverlay from './components/ItemGanhoOverlay';
 import FundoAmbiente from './components/FundoAmbiente';
 
+const ABAS_PLAYER = [
+  { key: 'ficha', label: 'Ficha', icone: '📜' },
+  { key: 'mapa', label: 'Mapa', icone: '🗺️' },
+  { key: 'combate', label: 'Combate', icone: '⚔️' },
+  { key: 'selecao', label: 'Online', icone: '🟢' },
+  { key: 'galeria', label: 'Galeria', icone: '🖼️' },
+];
+
 export default function App() {
   const [usuario, setUsuario] = useState(getUsuario());
   const [meuPersonagem, setMeuPersonagem] = useState(null);
@@ -32,39 +40,30 @@ export default function App() {
 
   return (
     <div>
-      <header className="flex justify-between items-center px-4 py-3 flex-wrap gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
-        <span className="display text-lg" style={{ color: 'var(--gold)' }}>Manus Milles</span>
+      <header className="flex justify-between items-center px-4 sm:px-6 py-3 flex-wrap gap-3 sticky top-0 z-30"
+        style={{ background: 'rgba(18,8,16,0.85)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderBottom: '1px solid var(--border)' }}>
+        <span className="display text-lg sm:text-xl" style={{ color: 'var(--gold)' }}>Manus Milles</span>
         <div className="flex items-center gap-3 flex-wrap">
           {usuario.papel === 'player' && (
-            <div className="flex gap-1 flex-wrap">
-              <button onClick={() => setViewPlayer('ficha')} className="text-xs px-2 py-1 rounded"
-                style={viewPlayer === 'ficha' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-                Ficha
-              </button>
-              <button onClick={() => setViewPlayer('mapa')} className="text-xs px-2 py-1 rounded"
-                style={viewPlayer === 'mapa' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-                Mapa
-              </button>
-              <button onClick={() => setViewPlayer('combate')} className="text-xs px-2 py-1 rounded"
-                style={viewPlayer === 'combate' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-                Combate
-              </button>
-              <button onClick={() => setViewPlayer('selecao')} className="text-xs px-2 py-1 rounded"
-                style={viewPlayer === 'selecao' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-                Quem está online
-              </button>
-              <button onClick={() => setViewPlayer('galeria')} className="text-xs px-2 py-1 rounded"
-                style={viewPlayer === 'galeria' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-                Galeria
-              </button>
+            <div className="flex gap-1.5 flex-wrap">
+              {ABAS_PLAYER.map(({ key, label, icone }) => (
+                <button key={key} onClick={() => setViewPlayer(key)}
+                  className="flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-lg font-medium transition-colors"
+                  style={viewPlayer === key
+                    ? { background: 'var(--gold)', color: '#120810' }
+                    : { background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                  <span>{icone}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
             </div>
           )}
-          <span className="text-sm" style={{ color: 'var(--text-dim)' }}>{usuario.nome}</span>
-          <button onClick={() => setTrocandoSenha(true)} className="text-xs px-2 py-1 rounded"
+          <span className="text-sm hidden md:inline" style={{ color: 'var(--text-dim)' }}>{usuario.nome}</span>
+          <button onClick={() => setTrocandoSenha(true)} className="text-xs px-2.5 py-2 rounded-lg"
             style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Trocar senha
           </button>
-          <button onClick={() => { sair(); setUsuario(null); }} className="text-xs px-2 py-1 rounded"
+          <button onClick={() => { sair(); setUsuario(null); }} className="text-xs px-2.5 py-2 rounded-lg"
             style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
             Sair
           </button>

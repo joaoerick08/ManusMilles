@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, conectarSocket, getUsuario } from '../api';
 import CampoNum from '../components/CampoNum';
+import { comprimirImagem } from '../comprimirImagem';
 
 const ATRIBUTOS = [
   ['forca', 'Força'], ['destreza', 'Destreza'], ['constituicao', 'Constituição'],
@@ -131,8 +132,9 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
     if (!arquivo) return;
     setEnviando(true);
     try {
+      const comprimido = await comprimirImagem(arquivo);
       const form = new FormData();
-      form.append('avatar', arquivo);
+      form.append('avatar', comprimido);
       const { data } = await api.post(`/personagens/${personagemId}/avatar`, form);
       setFicha(data);
     } catch {
@@ -147,8 +149,9 @@ function Cabecalho({ ficha, atualizarLocal, personagemId, setFicha }) {
     if (!arquivo) return;
     setEnviandoCorpo(true);
     try {
+      const comprimido = await comprimirImagem(arquivo);
       const form = new FormData();
-      form.append('foto', arquivo);
+      form.append('foto', comprimido);
       const { data } = await api.post(`/personagens/${personagemId}/foto-corpo`, form);
       setFicha(data);
     } catch {
@@ -892,7 +895,7 @@ function DarItem({ personagemId, recarregar }) {
       form.append('dano', dano);
       form.append('resistencia', resistencia);
       form.append('quantidade', quantidade);
-      if (imagem) form.append('imagem', imagem);
+      if (imagem) form.append('imagem', await comprimirImagem(imagem));
       await api.post(`/personagens/${personagemId}/dar-item`, form);
       setNome(''); setDescricao(''); setDano(''); setResistencia(''); setImagem(null); setQuantidade(1);
       setMsg('Item entregue!');

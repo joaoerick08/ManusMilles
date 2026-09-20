@@ -44,4 +44,32 @@ async function removerArquivo(url) {
   if (error) console.error('Erro ao remover arquivo do armazenamento:', error.message);
 }
 
-module.exports = { garantirBucket, enviarArquivo, removerArquivo };
+// soma o tamanho de tudo que está no bucket, pra mostrar pro mestre quanto do plano
+// gratuito do Supabase (1GB) já foi usado. Pagina de 1000 em 1000 (limite da API).
+async function usoStorage() {
+  if (!supabase) return { bytes: 0, arquivos: 0, configurado: false };
+  let bytes = 0;
+  let arquivos = 0;
+  let offset = 0;
+  const LIMITE = 1000;
+  while (true) {
+    const { data, error } = await supabase.storage.from(BUCKET).list('', {
+      limit: LIMITE,
+      offset,
+      sortBy: { column: 'name', order: 'asc' },
+    });
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    for (const item of data) {
+      if (item.metadata?.size) {
+        bytes += item.metadata.size;
+        arquivos += 1;
+      }
+    }
+    if (data.length < LIMITE) break;
+    offset += LIMITE;
+  }
+  return { bytes, arquivos, configurado: true };
+}
+
+module.exports = { garantirBucket, enviarArquivo, removerArquivo, usoStorage };

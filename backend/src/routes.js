@@ -7,7 +7,7 @@ const { pool } = require('./db');
 const { autenticar, apenasMestre } = require('./auth');
 const { PDFDocument } = require('pdf-lib');
 const fieldMap = require('./pdfFieldMap.json');
-const { enviarArquivo, removerArquivo } = require('./storage');
+const { enviarArquivo, removerArquivo, usoStorage } = require('./storage');
 
 const router = express.Router();
 
@@ -787,6 +787,16 @@ router.delete('/config/fundo', apenasMestre, async (req, res) => {
   res.json({ ok: true });
 });
 
+// quanto do storage do Supabase (limite de 1GB no plano grátis) já foi usado
+router.get('/config/storage-uso', apenasMestre, async (req, res) => {
+  try {
+    const uso = await usoStorage();
+    res.json(uso);
+  } catch (err) {
+    res.status(500).json({ erro: err.message || 'Não foi possível consultar o uso de armazenamento' });
+  }
+});
+
 // ---------- MAPAS INTERATIVOS ----------
 const CORES_PIN = ['#e0554f', '#4f9de0', '#4fe08a', '#e0c94f', '#b04fe0', '#e08a4f', '#4fd8e0', '#e04f9e'];
 
@@ -799,7 +809,8 @@ router.get('/mapas/ativo', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM mapas WHERE ativo = true LIMIT 1');
   if (!rows[0]) return res.json(null);
   const pins = await pool.query('SELECT * FROM mapa_pins WHERE mapa_id = $1', [rows[0].id]);
-  res.json({ ...rows[0], pins: pins.rows });
+  const marcadores = await pool.query('SELECT * FROM mapa_marcadores WHERE mapa_id = $1 ORDER BY id', [rows[0].id]);
+  res.json({ ...rows[0], pins: pins.rows, marcadores: marcadores.rows });
 });
 
 router.post('/mapas', apenasMestre, uploadMemoria.single('mapa'), async (req, res) => {
@@ -819,7 +830,8 @@ router.put('/mapas/:id/ativar', apenasMestre, async (req, res) => {
   const { rows } = await pool.query('UPDATE mapas SET ativo = true WHERE id = $1 RETURNING *', [req.params.id]);
   if (!rows[0]) return res.status(404).json({ erro: 'Mapa não encontrado' });
   const pins = await pool.query('SELECT * FROM mapa_pins WHERE mapa_id = $1', [rows[0].id]);
-  const mapaCompleto = { ...rows[0], pins: pins.rows };
+  const marcadores = await pool.query('SELECT * FROM mapa_marcadores WHERE mapa_id = $1 ORDER BY id', [rows[0].id]);
+  const mapaCompleto = { ...rows[0], pins: pins.rows, marcadores: marcadores.rows };
   req.io.emit('mapa-trocado', mapaCompleto);
   res.json(mapaCompleto);
 });
@@ -854,6 +866,27 @@ router.delete('/mapas/:id/pins/mine', async (req, res) => {
 router.delete('/mapas/:id/pins', apenasMestre, async (req, res) => {
   await pool.query('DELETE FROM mapa_pins WHERE mapa_id = $1', [req.params.id]);
   req.io.emit('mapa-pins-limpos', { mapa_id: Number(req.params.id) });
+  res.json({ ok: true });
+});
+
+// marcadores extras no mapa (NPC, inimigo, ponto de interesse etc) — só o mestre mexe
+const TIPOS_MARCADOR = ['npc', 'inimigo', 'interesse'];
+
+router.post('/mapas/:id/marcadores', apenasMestre, async (req, res) => {
+  const { nome, tipo, x, y } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Dá um nome pro marcador' });
+  const tipoFinal = TIPOS_MARCADOR.includes(tipo) ? tipo : 'npc';
+  const { rows } = await pool.query(
+    `INSERT INTO mapa_marcadores (mapa_id, nome, tipo, x, y) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [req.params.id, nome, tipoFinal, x, y]
+  );
+  req.io.emit('mapa-marcador-adicionado', rows[0]);
+  res.json(rows[0]);
+});
+
+router.delete('/mapas/:id/marcadores/:marcadorId', apenasMestre, async (req, res) => {
+  await pool.query('DELETE FROM mapa_marcadores WHERE id = $1 AND mapa_id = $2', [req.params.marcadorId, req.params.id]);
+  req.io.emit('mapa-marcador-removido', { mapa_id: Number(req.params.id), marcador_id: Number(req.params.marcadorId) });
   res.json({ ok: true });
 });
 

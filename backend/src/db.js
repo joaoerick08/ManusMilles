@@ -141,6 +141,16 @@ async function iniciar() {
       atualizado_em TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(mapa_id, usuario_id)
     );
+
+    CREATE TABLE IF NOT EXISTS mapa_marcadores (
+      id SERIAL PRIMARY KEY,
+      mapa_id INTEGER NOT NULL REFERENCES mapas(id) ON DELETE CASCADE,
+      nome TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'npc',
+      x REAL NOT NULL,
+      y REAL NOT NULL,
+      criado_em TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 
   // migração incremental segura (não quebra se a coluna já existir)

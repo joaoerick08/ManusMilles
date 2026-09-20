@@ -44,13 +44,14 @@ export default function DiceRoller() {
   return (
     <>
       <button onClick={() => setAberto(!aberto)}
-        className="fixed bottom-5 right-5 w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg z-40"
+        className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-1 px-2 py-3 rounded-l-xl shadow-lg"
         style={{ background: 'var(--gold)', color: '#120810' }} title="Rolar dados">
-        🎲
+        <span className="text-xl leading-none">🎲</span>
+        <span className="text-[10px] font-semibold tracking-wide [writing-mode:vertical-rl]">DADOS</span>
       </button>
 
       {aberto && (
-        <div className="fixed bottom-24 right-5 w-96 max-w-[92vw] rounded-lg p-4 z-40 shadow-2xl"
+        <div className="fixed top-1/2 -translate-y-1/2 right-14 w-96 max-w-[85vw] rounded-lg p-4 z-40 shadow-2xl"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <h4 className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--gold)' }}>Rolar dados</h4>
 

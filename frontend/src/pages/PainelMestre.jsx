@@ -6,7 +6,19 @@ import PainelCombate from './PainelCombate';
 import SelecaoJogadores from './SelecaoJogadores';
 import Galeria from './Galeria';
 import UsuariosOnline from '../components/UsuariosOnline';
+import UsoStorage from '../components/UsoStorage';
 import ProtecaoErro from '../components/ProtecaoErro';
+import { comprimirImagem } from '../comprimirImagem';
+
+const ABAS_MESTRE = [
+  { key: 'fichas', label: 'Fichas', icone: '📜' },
+  { key: 'transmitir', label: 'Transmitir', icone: '📡' },
+  { key: 'jogadores', label: 'Jogadores', icone: '👥' },
+  { key: 'mapa', label: 'Mapa', icone: '🗺️' },
+  { key: 'combate', label: 'Combate', icone: '⚔️' },
+  { key: 'selecao', label: 'Online', icone: '🟢' },
+  { key: 'galeria', label: 'Galeria', icone: '🖼️' },
+];
 
 export default function PainelMestre() {
   const [personagens, setPersonagens] = useState([]);
@@ -27,49 +39,33 @@ export default function PainelMestre() {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen">
-      <aside className="w-full md:w-64 flex-shrink-0 p-4" style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
-        <h2 className="display text-lg mb-4" style={{ color: 'var(--gold)' }}>Mesa</h2>
+      <aside className="w-full md:w-72 lg:w-80 flex-shrink-0 p-4 md:p-5"
+        style={{ background: 'rgba(29,15,26,0.82)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderRight: '1px solid var(--border)' }}>
+        <h2 className="display text-xl mb-4" style={{ color: 'var(--gold)' }}>Mesa</h2>
 
-        <div className="mb-4 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="mb-4 pb-4 space-y-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <UsuariosOnline />
+          <UsoStorage />
         </div>
 
-        <div className="flex gap-1 mb-4 flex-wrap">
-          <button onClick={() => setAbaLateral('fichas')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'fichas' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Fichas
-          </button>
-          <button onClick={() => setAbaLateral('transmitir')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'transmitir' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Transmitir
-          </button>
-          <button onClick={() => setAbaLateral('jogadores')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'jogadores' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Jogadores
-          </button>
-          <button onClick={() => setAbaLateral('mapa')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'mapa' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Mapa
-          </button>
-          <button onClick={() => setAbaLateral('combate')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'combate' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Combate
-          </button>
-          <button onClick={() => setAbaLateral('selecao')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'selecao' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Online
-          </button>
-          <button onClick={() => setAbaLateral('galeria')} className="flex-1 py-1.5 rounded text-xs"
-            style={abaLateral === 'galeria' ? { background: 'var(--gold)', color: '#120810' } : { border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-            Galeria
-          </button>
+        <div className="grid grid-cols-2 gap-1.5 mb-4">
+          {ABAS_MESTRE.map(({ key, label, icone }) => (
+            <button key={key} onClick={() => setAbaLateral(key)}
+              className="flex items-center gap-1.5 py-2.5 px-2 rounded-lg text-sm font-medium transition-colors"
+              style={abaLateral === key
+                ? { background: 'var(--gold)', color: '#120810' }
+                : { background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+              <span>{icone}</span>
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
         </div>
 
         {abaLateral === 'fichas' && (
           <div className="space-y-1">
             {personagens.map(p => (
               <button key={p.id} onClick={() => setSelecionado(p.id)}
-                className="w-full text-left px-3 py-2 rounded text-sm"
+                className="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors"
                 style={selecionado === p.id ? { background: 'var(--surface-2)', color: 'var(--gold)' } : { color: 'var(--text)' }}>
                 {p.nome || '(sem nome)'}
               </button>
@@ -117,8 +113,9 @@ function PainelMapas() {
     if (!arquivo) { setMsg('Escolhe uma imagem primeiro'); return; }
     setEnviando(true);
     try {
+      const comprimido = await comprimirImagem(arquivo);
       const form = new FormData();
-      form.append('mapa', arquivo);
+      form.append('mapa', comprimido);
       form.append('nome', nome || 'Mapa sem nome');
       await api.post('/mapas', form);
       setNome(''); setArquivo(null); setMsg('Mapa adicionado!');
@@ -209,7 +206,7 @@ function PainelTransmitir({ usuarios }) {
     try {
       const form = new FormData();
       form.append('destino', destino);
-      if (arquivo) form.append('imagem', arquivo);
+      if (arquivo) form.append('imagem', await comprimirImagem(arquivo));
       else if (urlExterna) form.append('url', urlExterna);
       else { setMsg('Escolha uma imagem ou cole uma URL'); setEnviando(false); return; }
       await api.post('/broadcast', form);
@@ -304,8 +301,9 @@ function PainelFundo() {
     setEnviando(true);
     setMsg('');
     try {
+      const comprimido = await comprimirImagem(arquivo);
       const form = new FormData();
-      form.append('imagem', arquivo);
+      form.append('imagem', comprimido);
       await api.post('/config/fundo', form);
       setArquivo(null);
       setMsg('Fundo atualizado pra todo mundo!');
