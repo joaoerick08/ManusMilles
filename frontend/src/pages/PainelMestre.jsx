@@ -341,6 +341,9 @@ function PainelFundo() {
 function PainelJogadores({ usuarios, recarregar }) {
   const [novo, setNovo] = useState({ nome: '', login: '', senha: '' });
   const [msg, setMsg] = useState('');
+  const [resetandoId, setResetandoId] = useState(null);
+  const [novaSenha, setNovaSenha] = useState('');
+  const [msgReset, setMsgReset] = useState('');
 
   async function adicionar() {
     if (!novo.nome || !novo.login || !novo.senha) { setMsg('Preencha tudo'); return; }
@@ -360,15 +363,70 @@ function PainelJogadores({ usuarios, recarregar }) {
     recarregar();
   }
 
+  function abrirReset(id) {
+    setResetandoId(id);
+    setNovaSenha(gerarSenhaAleatoria());
+    setMsgReset('');
+  }
+
+  function gerarSenhaAleatoria() {
+    const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let s = '';
+    for (let i = 0; i < 6; i++) s += alfabeto[Math.floor(Math.random() * alfabeto.length)];
+    return s;
+  }
+
+  async function confirmarReset(usuario) {
+    if (!novaSenha || novaSenha.length < 4) { setMsgReset('Mínimo 4 caracteres'); return; }
+    try {
+      await api.put(`/usuarios/${usuario.id}/resetar-senha`, { senha_nova: novaSenha });
+      setMsgReset(`Pronto! Nova senha de ${usuario.nome}: "${novaSenha}" — avisa ele.`);
+    } catch (e) {
+      setMsgReset(e.response?.data?.erro || 'Erro ao resetar');
+    }
+  }
+
   return (
     <div className="space-y-3">
       {usuarios.map(u => (
-        <div key={u.id} className="flex justify-between items-center text-sm p-2 rounded" style={{ background: 'var(--surface-2)' }}>
-          <div>
-            <p>{u.nome}</p>
-            <p className="text-xs" style={{ color: 'var(--text-dim)' }}>login: {u.login}</p>
+        <div key={u.id} className="rounded p-2" style={{ background: 'var(--surface-2)' }}>
+          <div className="flex justify-between items-center text-sm">
+            <div>
+              <p>{u.nome}</p>
+              <p className="text-xs" style={{ color: 'var(--text-dim)' }}>login: {u.login}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => abrirReset(u.id)} className="text-xs px-2 py-1 rounded"
+                style={{ border: '1px solid var(--border)', color: 'var(--gold)' }} title="Resetar senha">
+                🔑 Resetar
+              </button>
+              <button onClick={() => remover(u.id)} style={{ color: 'var(--danger)' }}>✕</button>
+            </div>
           </div>
-          <button onClick={() => remover(u.id)} style={{ color: 'var(--danger)' }}>✕</button>
+
+          {resetandoId === u.id && (
+            <div className="mt-2 pt-2 space-y-1.5" style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="flex gap-1.5">
+                <input value={novaSenha} onChange={e => setNovaSenha(e.target.value)}
+                  className="flex-1 px-2 py-1 rounded text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+                <button onClick={() => setNovaSenha(gerarSenhaAleatoria())} className="px-2 py-1 rounded text-xs"
+                  style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }} title="Gerar outra">
+                  🎲
+                </button>
+              </div>
+              <div className="flex gap-1.5">
+                <button onClick={() => confirmarReset(u)} className="flex-1 py-1.5 rounded text-xs font-medium"
+                  style={{ background: 'var(--gold)', color: '#120810' }}>
+                  Confirmar reset
+                </button>
+                <button onClick={() => { setResetandoId(null); setMsgReset(''); }} className="px-3 py-1.5 rounded text-xs"
+                  style={{ border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+                  Cancelar
+                </button>
+              </div>
+              {msgReset && <p className="text-[11px]" style={{ color: 'var(--gold)' }}>{msgReset}</p>}
+            </div>
+          )}
         </div>
       ))}
 

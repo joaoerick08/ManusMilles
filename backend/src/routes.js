@@ -487,6 +487,17 @@ router.put('/minha-senha', async (req, res) => {
   res.json({ ok: true });
 });
 
+// mestre reseta a senha de um jogador que esqueceu a própria (não precisa da senha antiga)
+router.put('/usuarios/:id/resetar-senha', apenasMestre, async (req, res) => {
+  const { senha_nova } = req.body;
+  if (!senha_nova || senha_nova.length < 4) return res.status(400).json({ erro: 'A senha precisa ter pelo menos 4 caracteres' });
+  const hash = bcrypt.hashSync(senha_nova, 10);
+  const { rows } = await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE id = $2 RETURNING id, nome, login', [hash, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ erro: 'Jogador não encontrado' });
+  console.log(`[senha] resetada pelo mestre - usuario ${rows[0].login} (id ${rows[0].id}) em ${new Date().toISOString()}`);
+  res.json({ ok: true });
+});
+
 // ---------- IMPORTAR FICHA DE PDF PREENCHIDO ----------
 // ---------- EXPORTAR FICHA PREENCHIDA EM PDF (pode ser reimportada depois) ----------
 router.get('/personagens/:id/exportar-pdf', async (req, res) => {
