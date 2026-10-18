@@ -116,9 +116,12 @@ const CAMPOS_EDITAVEIS = [
   'bonus_proficiencia','foto_url','atributos','protecoes','pv_max','pv_atual','pv_temp',
   'dados_vida_total','dados_vida_usados','pontos_sombra','testes_morte','catarse_atual',
   'catarse_total','enfase_atual','enfase_total','deslocamento','tamanho','reducao_dano',
-  'iniciativa_bonus','idiomas','ataques'
+  'iniciativa_bonus','idiomas','ataques','proficiencias','melancolia'
 ];
 const CAMPOS_SO_MESTRE = ['notas_mestre'];
+// Colunas JSONB: o node-pg converte arrays JS para array do Postgres ({"..."}) e não para JSON,
+// o que quebra o UPDATE. Por isso serializamos explicitamente.
+const CAMPOS_JSON = ['atributos','protecoes','pontos_sombra','testes_morte','idiomas','ataques'];
 
 router.put('/personagens/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
@@ -133,7 +136,8 @@ router.put('/personagens/:id', async (req, res) => {
   for (const campo of campos) {
     if (campo in req.body) {
       sets.push(`${campo} = $${i++}`);
-      valores.push(req.body[campo]);
+      const v = req.body[campo];
+      valores.push(CAMPOS_JSON.includes(campo) ? JSON.stringify(v) : v);
     }
   }
   if (sets.length > 0) {

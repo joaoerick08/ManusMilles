@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, conectarSocket, getUsuario } from '../api';
 import CampoNum from '../components/CampoNum';
 import { comprimirImagem } from '../comprimirImagem';
+import { rolarFormula, extrairFormula } from '../dados';
 
 const ATRIBUTOS = [
   ['forca', 'Força'], ['destreza', 'Destreza'], ['constituicao', 'Constituição'],
@@ -41,7 +42,11 @@ export default function FichaJogador({ personagemId }) {
     salvarTimeout.current = setTimeout(() => {
       const paraSalvar = pendentes.current;
       pendentes.current = {};
-      api.put(`/personagens/${personagemId}`, paraSalvar).catch(() => {});
+      api.put(`/personagens/${personagemId}`, paraSalvar).catch((err) => {
+        console.error('Falha ao salvar ficha:', err?.response?.data || err);
+        // devolve o que não foi salvo para tentar de novo na próxima alteração
+        pendentes.current = { ...paraSalvar, ...pendentes.current };
+      });
     }, 500);
   }
 
@@ -252,6 +257,18 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
         </div>
       </Secao>
 
+      <Secao titulo="Melancolia">
+        <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>Resumo do que o seu personagem precisa fazer em Skyfall</p>
+        <textarea
+          value={ficha.melancolia || ''}
+          onChange={e => atualizarLocal({ melancolia: e.target.value })}
+          placeholder="Escreva aqui a melancolia do seu personagem e o que ele busca..."
+          rows={4}
+          className="w-full px-2 py-1.5 rounded text-sm"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}
+        />
+      </Secao>
+
       <Secao titulo="Atributos">
         <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>Valor do modificador (-2 a +4, pode ser maior em níveis altos)</p>
         <div className="grid grid-cols-3 gap-3">
@@ -347,20 +364,61 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
 
       <SecaoPericias personagemId={personagemId} pericias={ficha.pericias || []} recarregar={recarregar} />
 
+      <Secao titulo="Proficiências">
+        <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>Armas, armaduras, ferramentas, instrumentos e o que mais o personagem sabe usar</p>
+        <textarea
+          value={ficha.proficiencias || ''}
+          onChange={e => atualizarLocal({ proficiencias: e.target.value })}
+          placeholder="Ex: Armas simples, escudos, ferramentas de ladrão, alaúde..."
+          rows={4}
+          className="w-full px-2 py-1.5 rounded text-sm"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}
+        />
+      </Secao>
+
       <ListaEditavel
         titulo="Ataques"
         itens={ficha.ataques || []}
         onChange={v => atualizarLocal({ ataques: v })}
         novoItem={() => ({ nome: '', teste: '', dano: '', critico: '', tipo: '' })}
-        renderItem={(item, atualizar, remover) => (
-          <div className="grid grid-cols-5 gap-1 items-center">
-            {['nome', 'teste', 'dano', 'critico', 'tipo'].map(campo => (
-              <input key={campo} value={item[campo] || ''} placeholder={campo} onChange={e => atualizar({ ...item, [campo]: e.target.value })}
-                className="px-1 py-1 rounded text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-            ))}
-            <button onClick={remover} className="col-span-5 text-xs text-right" style={{ color: 'var(--danger)' }}>remover</button>
-          </div>
-        )}
+        renderItem={(item, atualizar, remover) => {
+          const rolarAtaque = (rotulo, texto, baseD20) => {
+            const formula = extrairFormula(texto, { baseD20 });
+            const r = formula && rolarFormula(formula);
+            if (!r) return;
+            conectarSocket().emit('rolar-dado', {
+              ...r,
+              contexto: `${ficha.nome || 'Personagem'} · ${item.nome?.trim() || 'Ataque'} (${rotulo})`,
+            });
+          };
+          const botoes = [
+            ['Teste', 'teste', true],
+            ['Dano', 'dano', false],
+            ['Crítico', 'critico', false],
+          ];
+          return (
+            <div className="grid grid-cols-5 gap-1 items-center">
+              {['nome', 'teste', 'dano', 'critico', 'tipo'].map(campo => (
+                <input key={campo} value={item[campo] || ''} placeholder={campo} onChange={e => atualizar({ ...item, [campo]: e.target.value })}
+                  className="px-1 py-1 rounded text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+              ))}
+              <div className="col-span-5 flex items-center gap-2">
+                {botoes.map(([rotulo, campo, baseD20]) => {
+                  const pode = !!extrairFormula(item[campo], { baseD20 });
+                  return (
+                    <button key={campo} onClick={() => rolarAtaque(rotulo, item[campo], baseD20)} disabled={!pode}
+                      title={pode ? `Rolar ${rotulo.toLowerCase()}` : `Preencha "${campo}" com uma fórmula (ex: ${baseD20 ? '+5 ou 1d20+5' : '2d6+3'})`}
+                      className="text-xs px-2 py-1 rounded disabled:opacity-30"
+                      style={{ border: '1px solid var(--gold)', color: 'var(--gold)' }}>
+                      🎲 {rotulo}
+                    </button>
+                  );
+                })}
+                <button onClick={remover} className="ml-auto text-xs" style={{ color: 'var(--danger)' }}>remover</button>
+              </div>
+            </div>
+          );
+        }}
       />
 
       {usuario.papel === 'mestre' && (

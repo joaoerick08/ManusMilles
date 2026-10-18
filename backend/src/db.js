@@ -156,6 +156,8 @@ async function iniciar() {
   // migração incremental segura (não quebra se a coluna já existir)
   await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS notas_mestre TEXT DEFAULT \'\'');
   await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS foto_corpo_url TEXT');
+  await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS proficiencias TEXT DEFAULT \'\'');
+  await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS melancolia TEXT DEFAULT \'\'');
   await pool.query('ALTER TABLE inventario ADD COLUMN IF NOT EXISTS dano TEXT');
   await pool.query('ALTER TABLE inventario ADD COLUMN IF NOT EXISTS resistencia TEXT');
   await pool.query('ALTER TABLE inventario ADD COLUMN IF NOT EXISTS imagem_url TEXT');
