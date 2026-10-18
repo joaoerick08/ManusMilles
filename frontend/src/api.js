@@ -27,7 +27,12 @@ api.interceptors.request.use((config) => {
 let socket;
 export function conectarSocket() {
   if (socket) return socket;
-  socket = io(BASE_URL || undefined, { auth: { token: getToken() } });
+  socket = io(BASE_URL || undefined, { auth: { token: getToken() }, reconnectionDelayMax: 3000 });
+  // navegador de celular derruba a conexão em segundo plano: reconecta assim que voltar pra tela ou a internet voltar
+  const reconectar = () => { if (socket && !socket.connected) socket.connect(); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reconectar(); });
+  window.addEventListener('online', reconectar);
+  window.addEventListener('focus', reconectar);
   return socket;
 }
 export function getSocket() { return socket; }

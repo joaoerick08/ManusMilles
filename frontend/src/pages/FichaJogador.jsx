@@ -37,7 +37,9 @@ export default function FichaJogador({ personagemId }) {
 
   useEffect(() => {
     const socket = conectarSocket();
-    socket.emit('entrar-ficha', personagemId);
+    const entrarNaSala = () => socket.emit('entrar-ficha', personagemId);
+    entrarNaSala();
+    socket.on('connect', entrarNaSala); // reconexão cria uma conexão nova, que precisa entrar na sala de novo
     const aoAtualizar = (nova) => setFicha((atual) => (
       atual && atual.id === nova.id ? { ...nova, ...camposProtegidos() } : atual
     ));
@@ -50,6 +52,7 @@ export default function FichaJogador({ personagemId }) {
     socket.on('ficha-atualizada', aoAtualizar);
     socket.on('ficha-atualizada-parcial', aoAtualizarParcial);
     return () => {
+      socket.off('connect', entrarNaSala);
       socket.off('ficha-atualizada', aoAtualizar);
       socket.off('ficha-atualizada-parcial', aoAtualizarParcial);
     };
