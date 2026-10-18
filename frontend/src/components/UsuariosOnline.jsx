@@ -6,10 +6,26 @@ export default function UsuariosOnline() {
 
   useEffect(() => {
     const socket = conectarSocket();
+
     const aoAtualizar = (l) => setLista(l);
+
+    const aoConectar = () => {
+      // Sempre que conectar ou reconectar (comum em móbiles), pede a lista
+      socket.emit('pedir-online');
+    };
+
     socket.on('usuarios-online', aoAtualizar);
-    socket.emit('pedir-online');
-    return () => socket.off('usuarios-online', aoAtualizar);
+    socket.on('connect', aoConectar);
+
+    // Se já estiver conectado quando o componente montar
+    if (socket.connected) {
+      socket.emit('pedir-online');
+    }
+
+    return () => {
+      socket.off('usuarios-online', aoAtualizar);
+      socket.off('connect', aoConectar);
+    };
   }, []);
 
   return (
