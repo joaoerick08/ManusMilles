@@ -1,8 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { conectarSocket, api } from '../api';
 import { CONDICOES } from '../condicoes';
 
 function novoId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
+
+// Campo numérico que não é sobrescrito pelo eco do servidor enquanto você está digitando
+function NumeroCombate({ value, onCommit, className, style }) {
+  const [texto, setTexto] = useState(String(value ?? 0));
+  const focado = useRef(false);
+
+  useEffect(() => {
+    if (!focado.current) setTexto(String(value ?? 0));
+  }, [value]);
+
+  return (
+    <input type="number" value={texto} className={className} style={style}
+      onFocus={() => { focado.current = true; }}
+      onBlur={() => { focado.current = false; setTexto(String(value ?? 0)); }}
+      onChange={e => {
+        setTexto(e.target.value);
+        if (e.target.value !== '' && !Number.isNaN(Number(e.target.value))) onCommit(Number(e.target.value));
+      }} />
+  );
+}
 
 function SeletorCondicoes({ ativas, onMudar }) {
   const [aberto, setAberto] = useState(false);
@@ -166,9 +186,9 @@ export default function PainelCombate({ editavel }) {
               </div>
               {editavel && (
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <input type="number" value={p.pv_atual} onChange={e => atualizarParticipante(p.id, { pv_atual: Number(e.target.value) })}
+                  <NumeroCombate value={p.pv_atual} onCommit={v => atualizarParticipante(p.id, { pv_atual: v })}
                     className="w-14 text-center py-1 rounded text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-                  <input type="number" value={p.iniciativa} onChange={e => atualizarParticipante(p.id, { iniciativa: Number(e.target.value) })}
+                  <NumeroCombate value={p.iniciativa} onCommit={v => atualizarParticipante(p.id, { iniciativa: v })}
                     className="w-12 text-center py-1 rounded text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
                   <button onClick={() => removerParticipante(p.id)} style={{ color: 'var(--danger)' }}>✕</button>
                 </div>

@@ -13,11 +13,23 @@ export default function FichaJogador({ personagemId }) {
   const [ficha, setFicha] = useState(null);
   const [aba, setAba] = useState('ficha');
   const salvarTimeout = useRef(null);
-  const pendentes = useRef({});
+  const pendentes = useRef({});   // editado, ainda não enviado
+  const emVoo = useRef({});       // enviado, servidor ainda não respondeu
+  const recentes = useRef({});    // campo -> { valor, t } do que foi digitado há pouco
+
+  // Campos que o usuário mexeu há pouco: o servidor não pode sobrescrever isso com versão antiga
+  function camposProtegidos() {
+    const agora = Date.now();
+    const out = {};
+    for (const [k, { valor, t }] of Object.entries(recentes.current)) {
+      if (agora - t < 4000) out[k] = valor;
+    }
+    return { ...out, ...emVoo.current, ...pendentes.current };
+  }
 
   const carregar = useCallback(async () => {
     const { data } = await api.get(`/personagens/${personagemId}`);
-    setFicha(data);
+    setFicha((atual) => (atual && atual.id === data.id ? { ...data, ...camposProtegidos() } : data));
   }, [personagemId]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -25,8 +37,15 @@ export default function FichaJogador({ personagemId }) {
   useEffect(() => {
     const socket = conectarSocket();
     socket.emit('entrar-ficha', personagemId);
-    const aoAtualizar = (nova) => setFicha((atual) => atual && atual.id === nova.id ? nova : atual);
-    const aoAtualizarParcial = (campos) => setFicha((atual) => atual ? { ...atual, ...campos } : atual);
+    const aoAtualizar = (nova) => setFicha((atual) => (
+      atual && atual.id === nova.id ? { ...nova, ...camposProtegidos() } : atual
+    ));
+    const aoAtualizarParcial = (campos) => setFicha((atual) => {
+      if (!atual) return atual;
+      const protegidos = camposProtegidos();
+      const livres = Object.fromEntries(Object.entries(campos).filter(([k]) => !(k in protegidos)));
+      return { ...atual, ...livres };
+    });
     socket.on('ficha-atualizada', aoAtualizar);
     socket.on('ficha-atualizada-parcial', aoAtualizarParcial);
     return () => {
@@ -36,14 +55,23 @@ export default function FichaJogador({ personagemId }) {
   }, [personagemId]);
 
   function atualizarLocal(campos) {
+    const t = Date.now();
+    for (const [k, valor] of Object.entries(campos)) recentes.current[k] = { valor, t };
     setFicha((f) => ({ ...f, ...campos }));
     pendentes.current = { ...pendentes.current, ...campos };
     clearTimeout(salvarTimeout.current);
     salvarTimeout.current = setTimeout(() => {
       const paraSalvar = pendentes.current;
       pendentes.current = {};
-      api.put(`/personagens/${personagemId}`, paraSalvar).catch((err) => {
+      emVoo.current = { ...emVoo.current, ...paraSalvar };
+      const liberar = () => {
+        for (const [k, v] of Object.entries(paraSalvar)) {
+          if (emVoo.current[k] === v) delete emVoo.current[k];
+        }
+      };
+      api.put(`/personagens/${personagemId}`, paraSalvar).then(liberar).catch((err) => {
         console.error('Falha ao salvar ficha:', err?.response?.data || err);
+        liberar();
         // devolve o que não foi salvo para tentar de novo na próxima alteração
         pendentes.current = { ...paraSalvar, ...pendentes.current };
       });
