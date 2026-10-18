@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { pool } = require('./db');
 const { autenticar, apenasMestre } = require('./auth');
-const { PDFDocument } = require('pdf-lib');
+const { PDFDocument, PDFName, PDFNumber } = require('pdf-lib');
 const fieldMap = require('./pdfFieldMap.json');
 const { enviarArquivo, removerArquivo, usoStorage } = require('./storage');
 
@@ -22,12 +22,27 @@ router.get('/usuarios', apenasMestre, async (req, res) => {
   res.json(rows);
 });
 
+// Atributo sugerido por perícia (o livro deixa a Mestre escolher o atributo a cada teste; aqui é só o padrão inicial)
 const PERICIAS_PADRAO = [
-  'Apresentação', 'Arcanismo', 'Cultura', 'Diplomacia', 'Doutrinas', 'Furtividade',
-  'Intimidação', 'Intuição', 'Magitec', 'Malandragem', 'Manipulação', 'Medicina',
-  'Natureza', 'Percepção', 'Preparo Físico',
-  'Aptidão com ___', 'Aptidão com ___', 'Aptidão com ___',
-].map(nome => ({ nome, proficiente: false, total: 0 }));
+  ['Apresentação', 'carisma'], ['Arcanismo', 'inteligencia'], ['Cultura', 'inteligencia'],
+  ['Diplomacia', 'carisma'], ['Doutrinas', 'sabedoria'], ['Furtividade', 'destreza'],
+  ['Intimidação', 'carisma'], ['Intuição', 'sabedoria'], ['Magitec', 'inteligencia'],
+  ['Malandragem', 'destreza'], ['Manipulação', 'carisma'], ['Medicina', 'sabedoria'],
+  ['Natureza', 'sabedoria'], ['Percepção', 'sabedoria'], ['Preparo Físico', 'forca'],
+  ['Aptidão com ___', null], ['Aptidão com ___', null], ['Aptidão com ___', null],
+].map(([nome, atributo]) => ({ nome, atributo, proficiente: false, total: 0 }));
+
+// Total da perícia: modificador do atributo + (0, 1x ou 2x o bônus de proficiência) + outros bônus.
+// Perícias sem atributo escolhido continuam com o total digitado à mão.
+function numeroDe(texto) {
+  const m = String(texto ?? '').replace(',', '.').match(/-?\d+(\.\d+)?/);
+  return m ? Number(m[0]) : 0;
+}
+function totalPericia(per, atributos, bonus) {
+  if (!per.atributo) return per.total ?? 0;
+  const nivelProf = per.expert ? 2 : (per.proficiente ? 1 : 0);
+  return (Number(atributos?.[per.atributo]) || 0) + nivelProf * bonus + numeroDe(per.outros);
+}
 
 router.post('/usuarios', apenasMestre, async (req, res) => {
   const { nome, login, senha } = req.body;
@@ -46,8 +61,8 @@ router.post('/usuarios', apenasMestre, async (req, res) => {
     let ordem = 0;
     for (const item of PERICIAS_PADRAO) {
       await pool.query(
-        'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, ordem) VALUES ($1,$2,$3,$4,$5)',
-        [personagemId, item.nome, false, 0, ordem++]
+        'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, ordem, atributo) VALUES ($1,$2,$3,$4,$5,$6)',
+        [personagemId, item.nome, false, 0, ordem++, item.atributo]
       );
     }
     res.json({ id: rows[0].id });
@@ -116,12 +131,12 @@ const CAMPOS_EDITAVEIS = [
   'bonus_proficiencia','foto_url','atributos','protecoes','pv_max','pv_atual','pv_temp',
   'dados_vida_total','dados_vida_usados','pontos_sombra','testes_morte','catarse_atual',
   'catarse_total','enfase_atual','enfase_total','deslocamento','tamanho','reducao_dano',
-  'iniciativa_bonus','idiomas','ataques','proficiencias','melancolia'
+  'iniciativa_bonus','idiomas','ataques','proficiencias','melancolia','atributos_valor'
 ];
 const CAMPOS_SO_MESTRE = ['notas_mestre'];
 // Colunas JSONB: o node-pg converte arrays JS para array do Postgres ({"..."}) e não para JSON,
 // o que quebra o UPDATE. Por isso serializamos explicitamente.
-const CAMPOS_JSON = ['atributos','protecoes','pontos_sombra','testes_morte','idiomas','ataques'];
+const CAMPOS_JSON = ['atributos','atributos_valor','protecoes','pontos_sombra','testes_morte','idiomas','ataques'];
 
 router.put('/personagens/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM personagens WHERE id = $1', [req.params.id]);
@@ -218,14 +233,14 @@ router.delete('/talentos/:id', async (req, res) => {
 router.post('/personagens/:id/pericias', async (req, res) => {
   const permissao = await podeEditarPersonagem(req, req.params.id);
   if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
-  const { nome, proficiente, total, outros } = req.body;
+  const { nome, proficiente, total, outros, expert, atributo } = req.body;
   if (!('ordem' in req.body)) {
     const { rows } = await pool.query('SELECT COALESCE(MAX(ordem), -1) AS m FROM pericias_personagem WHERE personagem_id = $1', [req.params.id]);
     req.body.ordem = rows[0].m + 1;
   }
   const { rows } = await pool.query(
-    'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, outros, ordem) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-    [req.params.id, nome || '', !!proficiente, total || 0, outros || null, req.body.ordem]
+    'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, outros, ordem, expert, atributo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+    [req.params.id, nome || '', !!proficiente, total || 0, outros || null, req.body.ordem, !!expert, atributo || null]
   );
   await emitirFicha(req, req.params.id);
   res.json({ id: rows[0].id });
@@ -237,10 +252,10 @@ router.put('/pericias/:id', async (req, res) => {
   if (!pericia) return res.status(404).json({ erro: 'Não encontrado' });
   const permissao = await podeEditarPersonagem(req, pericia.personagem_id);
   if (!permissao.ok) return res.status(permissao.status).json({ erro: permissao.erro });
-  const CAMPOS_PERICIA = ['nome', 'proficiente', 'total', 'outros', 'ordem'];
+  const CAMPOS_PERICIA = ['nome', 'proficiente', 'expert', 'atributo', 'total', 'outros', 'ordem'];
   const sets = []; const valores = [];
   let i = 1;
-  for (const c of CAMPOS_PERICIA) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(req.body[c]); }
+  for (const c of CAMPOS_PERICIA) if (c in req.body) { sets.push(`${c} = $${i++}`); valores.push(c === 'atributo' ? (req.body[c] || null) : req.body[c]); }
   if (sets.length) {
     valores.push(req.params.id);
     await pool.query(`UPDATE pericias_personagem SET ${sets.join(', ')} WHERE id = $${i}`, valores);
@@ -271,8 +286,8 @@ router.post('/personagens/:id/pericias/carregar-padrao', async (req, res) => {
   for (const item of PERICIAS_PADRAO) {
     if (nomesExistentes.includes(item.nome.toLowerCase())) continue;
     await pool.query(
-      'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, ordem) VALUES ($1,$2,$3,$4,$5)',
-      [req.params.id, item.nome, false, 0, ordem++]
+      'INSERT INTO pericias_personagem (personagem_id, nome, proficiente, total, ordem, atributo) VALUES ($1,$2,$3,$4,$5,$6)',
+      [req.params.id, item.nome, false, 0, ordem++, item.atributo]
     );
   }
   await emitirFicha(req, req.params.id);
@@ -516,6 +531,17 @@ router.get('/personagens/:id/exportar-pdf', async (req, res) => {
     const pdfDoc = await PDFDocument.load(templateBytes);
     const form = pdfDoc.getForm();
 
+    // No molde cada perícia tem 3 botões sobrepostos: E (Expert), P (Proficiente) e O (Não Proficiente).
+    // Só o O aparece por padrão (flag 4); mostramos o que vale e escondemos os outros (flag 36 = não exibir).
+    function marcarProficiencia(abrev, escolhido) {
+      for (const letra of ['E', 'P', 'O']) {
+        try {
+          const widget = form.getButton(`${abrev} ${letra}`).acroField.getWidgets()[0];
+          widget.dict.set(PDFName.of('F'), PDFNumber.of(letra === escolhido ? 4 : 36));
+        } catch { /* botão ausente nessa versão do PDF - ignora */ }
+      }
+    }
+
     function set(nomeCampo, valor) {
       if (valor === null || valor === undefined || valor === '') return;
       try {
@@ -538,7 +564,8 @@ router.get('/personagens/:id/exportar-pdf', async (req, res) => {
     for (const [abrev, nomeCompleto] of Object.entries(fieldMap.pericias)) {
       const pericia = (p.pericias || []).find(x => (x.nome || '').toLowerCase() === nomeCompleto.toLowerCase());
       if (pericia) {
-        set(`${abrev}Tot`, pericia.total ?? 0);
+        set(`${abrev}Tot`, totalPericia(pericia, p.atributos, bonus));
+        marcarProficiencia(abrev, pericia.expert ? 'E' : (pericia.proficiente ? 'P' : 'O'));
         if (pericia.outros) set(`${abrev}Out`, pericia.outros);
       }
     }

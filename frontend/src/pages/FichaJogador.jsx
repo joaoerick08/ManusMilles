@@ -3,6 +3,7 @@ import { api, conectarSocket, getUsuario } from '../api';
 import CampoNum from '../components/CampoNum';
 import { comprimirImagem } from '../comprimirImagem';
 import { rolarFormula, extrairFormula } from '../dados';
+import { ATRIBUTOS_ABREV, bonusPorNivel, totalPericia, comSinal } from '../pericias';
 
 const ATRIBUTOS = [
   ['forca', 'Força'], ['destreza', 'Destreza'], ['constituicao', 'Constituição'],
@@ -261,6 +262,7 @@ function Secao({ titulo, children }) {
 function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
   const usuario = getUsuario();
   const atributos = ficha.atributos || {};
+  const atributosValor = ficha.atributos_valor || {};
   const protecoes = ficha.protecoes || {};
   const sombra = Array.isArray(ficha.pontos_sombra) ? ficha.pontos_sombra : [false, false, false, false, false];
 
@@ -274,11 +276,11 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
           <CampoTexto label="Pronomes" value={ficha.pronomes} onChange={v => atualizarLocal({ pronomes: v })} />
           <div>
             <label className="text-[10px] block mb-1" style={{ color: 'var(--text-dim)' }}>Nível</label>
-            <input type="number" value={ficha.nivel ?? 0} onChange={e => atualizarLocal({ nivel: Number(e.target.value) })}
+            <input type="number" value={ficha.nivel ?? 0} onChange={e => { const nivel = Number(e.target.value); atualizarLocal({ nivel, bonus_proficiencia: bonusPorNivel(nivel) }); }}
               className="px-2 py-1 rounded w-full" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
           </div>
           <div>
-            <label className="text-[10px] block mb-1" style={{ color: 'var(--text-dim)' }}>Bônus de Proficiência</label>
+            <label className="text-[10px] block mb-1" style={{ color: 'var(--text-dim)' }}>Bônus de Proficiência <span style={{ opacity: 0.7 }}>(muda com o nível)</span></label>
             <input type="number" value={ficha.bonus_proficiencia ?? 2} onChange={e => atualizarLocal({ bonus_proficiencia: Number(e.target.value) })}
               className="px-2 py-1 rounded w-full" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
           </div>
@@ -298,14 +300,27 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
       </Secao>
 
       <Secao titulo="Atributos">
-        <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>Valor do modificador (-2 a +4, pode ser maior em níveis altos)</p>
-        <div className="grid grid-cols-3 gap-3">
+        <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>
+          Os testes, perícias e proteções usam o <strong>Modificador</strong> (-2 a +4, pode ser maior em níveis altos). O campo Atributo é livre, para anotar o valor da sua ficha.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {ATRIBUTOS.map(([chave, label]) => (
-            <div key={chave} className="text-center p-2 rounded" style={{ background: 'var(--surface-2)' }}>
-              <label className="text-[10px] block mb-1" style={{ color: 'var(--text-dim)' }}>{label}</label>
-              <input type="number" value={atributos[chave] ?? 0}
-                onChange={e => atualizarLocal({ atributos: { ...atributos, [chave]: Number(e.target.value) } })}
-                className="w-full text-center text-lg font-semibold bg-transparent outline-none" style={{ color: 'var(--text)' }} />
+            <div key={chave} className="p-2 rounded" style={{ background: 'var(--surface-2)' }}>
+              <label className="text-[11px] block mb-1.5 text-center font-medium" style={{ color: 'var(--text-dim)' }}>{label}</label>
+              <div className="flex gap-2">
+                <div className="flex-1 min-w-0 text-center">
+                  <span className="text-[9px] block" style={{ color: 'var(--text-dim)' }}>Atributo</span>
+                  <input type="number" value={atributosValor[chave] ?? ''}
+                    onChange={e => atualizarLocal({ atributos_valor: { ...atributosValor, [chave]: e.target.value === '' ? '' : Number(e.target.value) } })}
+                    className="w-full text-center text-lg font-semibold bg-transparent outline-none" style={{ color: 'var(--text)' }} />
+                </div>
+                <div className="flex-1 min-w-0 text-center" style={{ borderLeft: '1px solid var(--border)' }}>
+                  <span className="text-[9px] block" style={{ color: 'var(--gold)' }}>Modificador</span>
+                  <input type="number" value={atributos[chave] ?? 0}
+                    onChange={e => atualizarLocal({ atributos: { ...atributos, [chave]: Number(e.target.value) } })}
+                    className="w-full text-center text-lg font-semibold bg-transparent outline-none" style={{ color: 'var(--gold)' }} />
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -390,7 +405,8 @@ function AbaFicha({ ficha, atualizarLocal, personagemId, recarregar }) {
         </div>
       </Secao>
 
-      <SecaoPericias personagemId={personagemId} pericias={ficha.pericias || []} recarregar={recarregar} />
+      <SecaoPericias personagemId={personagemId} pericias={ficha.pericias || []} recarregar={recarregar}
+        atributos={atributos} bonus={ficha.bonus_proficiencia ?? 2} />
 
       <Secao titulo="Proficiências">
         <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>Armas, armaduras, ferramentas, instrumentos e o que mais o personagem sabe usar</p>
@@ -595,45 +611,84 @@ function CampoTexto({ label, value, onChange, small }) {
   );
 }
 
-function LinhaPericia({ item, salvar, remover, rolar }) {
+const estiloCampo = { background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' };
+
+function LinhaPericia({ item, atributos, bonus, salvar, remover, rolar }) {
   const [valores, setValores] = useState(item);
   const salvarTimeout = useRef(null);
+  const editando = useRef(false);
 
+  // só aceita o valor do servidor quando a pessoa não está mexendo nesta linha
   useEffect(() => {
-    if (!salvarTimeout.current) setValores(item);
+    if (!editando.current) setValores(item);
   }, [item]);
+
+  const automatico = !!valores.atributo;
+  const total = totalPericia(valores, atributos, bonus);
+  const nivelProf = valores.expert ? 'expert' : (valores.proficiente ? 'prof' : 'nao');
 
   function mudar(campos) {
     const novo = { ...valores, ...campos };
+    novo.total = totalPericia(novo, atributos, bonus);
     setValores(novo);
+    editando.current = true;
     clearTimeout(salvarTimeout.current);
-    salvarTimeout.current = setTimeout(() => salvar(novo), 400);
+    salvarTimeout.current = setTimeout(() => {
+      salvar(novo);
+      editando.current = false;
+    }, 400);
+  }
+
+  function mudarProficiencia(nivel) {
+    mudar({ proficiente: nivel !== 'nao', expert: nivel === 'expert' });
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <button onClick={() => rolar(valores)} title="Rolar 1d20 + bônus"
-        className="text-base flex-shrink-0 hover:opacity-70 transition-opacity">🎲</button>
-      <input value={valores.nome} onChange={e => mudar({ nome: e.target.value })} placeholder="Nome"
-        className="flex-1 px-2 py-1 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-      <input type="checkbox" checked={!!valores.proficiente} onChange={e => mudar({ proficiente: e.target.checked })} />
-      <input type="number" value={valores.total} onChange={e => mudar({ total: Number(e.target.value) })}
-        className="w-14 px-2 py-1 rounded text-sm text-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
-      <button onClick={remover} style={{ color: 'var(--danger)' }}>✕</button>
+    <div className="p-2 rounded space-y-1.5" style={{ background: 'var(--surface-2)' }}>
+      <div className="flex items-center gap-2">
+        <button onClick={() => rolar({ ...valores, total })} title="Rolar 1d20 + bônus"
+          className="text-base flex-shrink-0 hover:opacity-70 transition-opacity">🎲</button>
+        <input value={valores.nome} onChange={e => mudar({ nome: e.target.value })} placeholder="Nome"
+          className="flex-1 min-w-0 px-2 py-1 rounded text-sm" style={estiloCampo} />
+        <span className="text-base font-semibold w-10 text-center flex-shrink-0" style={{ color: 'var(--gold)' }} title={automatico ? 'Total calculado' : 'Total manual'}>
+          {automatico ? comSinal(total) : ''}
+        </span>
+        <button onClick={remover} style={{ color: 'var(--danger)' }}>✕</button>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap text-xs">
+        <select value={valores.atributo || ''} onChange={e => mudar({ atributo: e.target.value || null })}
+          title="Atributo usado (a Mestre pode trocar a cada teste)"
+          className="px-1.5 py-1 rounded" style={estiloCampo}>
+          <option value="">manual</option>
+          {Object.entries(ATRIBUTOS_ABREV).map(([chave, abrev]) => <option key={chave} value={chave}>{abrev}</option>)}
+        </select>
+        <select value={nivelProf} onChange={e => mudarProficiencia(e.target.value)}
+          className="px-1.5 py-1 rounded" style={estiloCampo}>
+          <option value="nao">Não proficiente</option>
+          <option value="prof">Proficiente (+1x)</option>
+          <option value="expert">Expert (+2x)</option>
+        </select>
+        <input value={valores.outros ?? ''} onChange={e => mudar({ outros: e.target.value })} placeholder="outros"
+          title="Outros bônus (ex: +2)" inputMode="numeric"
+          className="w-16 px-1.5 py-1 rounded text-center" style={estiloCampo} />
+        {!automatico && (
+          <input type="number" value={valores.total ?? 0} onChange={e => mudar({ total: Number(e.target.value) })}
+            title="Total digitado à mão (escolha um atributo para calcular sozinho)"
+            className="w-14 px-1.5 py-1 rounded text-center" style={estiloCampo} />
+        )}
+      </div>
     </div>
   );
 }
 
-function SecaoPericias({ personagemId, pericias, recarregar }) {
+function SecaoPericias({ personagemId, pericias, recarregar, atributos, bonus }) {
   function rolar(item) {
-    const socket = conectarSocket();
-    const d20 = 1 + Math.floor(Math.random() * 20);
-    const bonus = Number(item.total) || 0;
-    socket.emit('rolar-dado', {
+    const bonusTeste = Number(item.total) || 0;
+    const r = rolarFormula(`1d20${comSinal(bonusTeste)}`);
+    if (!r) return;
+    conectarSocket().emit('rolar-dado', {
+      ...r,
       contexto: item.nome && item.nome.trim() ? item.nome.trim() : 'Perícia sem nome',
-      expressao: `1d20${bonus >= 0 ? '+' : ''}${bonus}`,
-      valores: [d20],
-      resultado: d20 + bonus,
     });
   }
 
@@ -659,6 +714,9 @@ function SecaoPericias({ personagemId, pericias, recarregar }) {
 
   return (
     <Secao titulo="Perícias">
+      <p className="text-[11px] mb-2" style={{ color: 'var(--text-dim)' }}>
+        Total = modificador do atributo + bônus de proficiência ({comSinal(bonus)}) × (0, 1 ou 2) + outros. Em "manual" você digita o total.
+      </p>
       <div className="flex justify-end mb-2">
         <button onClick={carregarPadrao} className="text-xs px-2 py-1 rounded" style={{ border: '1px dashed var(--gold)', color: 'var(--gold)' }}>
           carregar perícias oficiais do Skyfall
@@ -666,7 +724,7 @@ function SecaoPericias({ personagemId, pericias, recarregar }) {
       </div>
       <div className="space-y-2">
         {pericias.map(item => (
-          <LinhaPericia key={item.id} item={item} rolar={rolar}
+          <LinhaPericia key={item.id} item={item} rolar={rolar} atributos={atributos} bonus={bonus}
             salvar={(v) => salvar(item.id, v)} remover={() => remover(item.id)} />
         ))}
       </div>

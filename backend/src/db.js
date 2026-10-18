@@ -158,6 +158,9 @@ async function iniciar() {
   await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS foto_corpo_url TEXT');
   await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS proficiencias TEXT DEFAULT \'\'');
   await pool.query('ALTER TABLE personagens ADD COLUMN IF NOT EXISTS melancolia TEXT DEFAULT \'\'');
+  await pool.query("ALTER TABLE personagens ADD COLUMN IF NOT EXISTS atributos_valor JSONB DEFAULT '{}'");
+  await pool.query('ALTER TABLE pericias_personagem ADD COLUMN IF NOT EXISTS expert BOOLEAN DEFAULT false');
+  await pool.query('ALTER TABLE pericias_personagem ADD COLUMN IF NOT EXISTS atributo TEXT');
   await pool.query('ALTER TABLE inventario ADD COLUMN IF NOT EXISTS dano TEXT');
   await pool.query('ALTER TABLE inventario ADD COLUMN IF NOT EXISTS resistencia TEXT');
   await pool.query('ALTER TABLE inventario ADD COLUMN IF NOT EXISTS imagem_url TEXT');
