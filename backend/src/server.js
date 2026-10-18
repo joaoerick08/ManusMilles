@@ -12,7 +12,14 @@ const { garantirBucket } = require('./storage');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+
+// Configuração do Socket.IO otimizada para conexões móveis (3G/4G/5G)
+const io = new Server(server, { 
+  cors: { origin: '*' },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000 
+});
 
 app.use(cors());
 app.use(express.json());
@@ -38,26 +45,37 @@ io.use((socket, next) => {
 });
 
 let gatoAtivo = null; // { id, x, y, enfaseValor }
-const usuariosOnline = new Map(); // socket.id -> { id, nome, papel }
-let combate = { ativo: false, participantes: [], turnoIndex: 0 }; // em memória, por sessão de jogo
+
+// Estrutura atualizada: armazena por ID de usuário e gerencia múltiplos sockets
+const usuariosOnline = new Map(); 
+let combate = { ativo: false, participantes: [], turnoIndex: 0 };
 
 function listaOnline() {
-  const vistos = new Set();
   const lista = [];
   for (const u of usuariosOnline.values()) {
-    if (vistos.has(u.id)) continue;
-    vistos.add(u.id);
-    lista.push(u);
+    lista.push({ id: u.id, nome: u.nome, papel: u.papel });
   }
   return lista;
 }
 
 io.on('connection', async (socket) => {
-  socket.join(`usuario-${socket.usuario.id}`);
+  const userId = socket.usuario.id;
+
+  // Gerencia reconexões sem duplicar nem derrubar o usuário
+  if (usuariosOnline.has(userId)) {
+    usuariosOnline.get(userId).sockets.add(socket.id);
+  } else {
+    usuariosOnline.set(userId, {
+      id: userId,
+      nome: socket.usuario.nome,
+      papel: socket.usuario.papel,
+      sockets: new Set([socket.id])
+    });
+  }
+
+  socket.join(`usuario-${userId}`);
   socket.on('entrar-ficha', (personagemId) => socket.join(`personagem-${personagemId}`));
 
-  // entra automaticamente na sala da própria ficha, pra sempre receber itens/atualizações
-  // mesmo que o app ainda não tenha aberto a aba de ficha nessa sessão
   if (socket.usuario.papel === 'player') {
     try {
       const { rows } = await pool.query('SELECT id FROM personagens WHERE usuario_id = $1', [socket.usuario.id]);
@@ -67,7 +85,6 @@ io.on('connection', async (socket) => {
     }
   }
 
-  usuariosOnline.set(socket.id, { id: socket.usuario.id, nome: socket.usuario.nome, papel: socket.usuario.papel });
   io.emit('usuarios-online', listaOnline());
   socket.emit('combate-atualizado', combate);
 
@@ -76,7 +93,17 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('disconnect', () => {
-    usuariosOnline.delete(socket.id);
+    const userSession = usuariosOnline.get(userId);
+    
+    if (userSession) {
+      userSession.sockets.delete(socket.id);
+      
+      // Só remove da lista se fechar TODAS as conexões/abas
+      if (userSession.sockets.size === 0) {
+        usuariosOnline.delete(userId);
+      }
+    }
+    
     io.emit('usuarios-online', listaOnline());
   });
 
@@ -115,7 +142,7 @@ io.on('connection', async (socket) => {
     io.emit('gato-capturado', { vencedor: socket.usuario.nome, enfaseValor: catarseValor });
   });
 
-  // ---- painel de combate/iniciativa (só o mestre controla, todos veem) ----
+  // ---- painel de combate/iniciativa ----
   socket.on('combate:definir', (novoEstado) => {
     if (socket.usuario.papel !== 'mestre') return;
     combate = novoEstado;
